@@ -8,27 +8,34 @@ from app.adapters.identity import (
     TokenVerifier,
     VerifiedIdentity,
 )
-from app.auth import get_current_user, get_token_verifier, identity_unavailable
+from app.auth import (
+    get_current_user,
+    get_token_verifier,
+    get_verified_identity,
+    identity_unavailable,
+)
+from app.models import User
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
 
-CurrentUser = Annotated[VerifiedIdentity, Depends(get_current_user)]
-
 
 @router.get("/me")
-def read_current_user(user: CurrentUser) -> dict[str, str | None]:
-    return {"uid": user.uid, "email": user.email}
+def read_current_user(
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict[str, str | None]:
+    return {"uid": user.firebase_uid, "email": user.email}
 
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
-    user: CurrentUser,
+    # Token only, so people can still log out while the database is down.
+    identity: Annotated[VerifiedIdentity, Depends(get_verified_identity)],
     verifier: Annotated[TokenVerifier, Depends(get_token_verifier)],
 ) -> None:
     try:
-        verifier.revoke(user.uid)
+        verifier.revoke(identity.uid)
     except IdentityServiceError:
-        logger.exception("Could not revoke tokens for uid %s", user.uid)
+        logger.exception("Could not revoke tokens for uid %s", identity.uid)
         raise identity_unavailable() from None
