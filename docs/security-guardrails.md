@@ -13,9 +13,11 @@ Firebase doesn't handle authorization. ReviewLens must verify tokens, map identi
 ## How identity maps to ownership
 
 1. The frontend signs in with the Firebase SDK and sends `Authorization: Bearer <ID token>`.
-2. The `get_current_user` dependency verifies the token with the Firebase Admin SDK on every protected request. A missing or invalid token returns 401.
+2. The `get_current_user` dependency verifies the token with the Firebase Admin SDK on every protected request. A missing or invalid token returns 401. If Firebase can't be reached, the request is denied with 503, never allowed through.
 3. The verified `uid` maps to a `users` row with a unique `firebase_uid`, created on the first authenticated request.
 4. That internal user ID is the only source of ownership.
+
+Logout calls `POST /api/auth/logout`, which revokes the user's Firebase tokens. Token checks include revocation, so a copied token stops working after logout (S1-BR-006). This signs the user out on all of their devices.
 
 ## User-scoped entities
 
