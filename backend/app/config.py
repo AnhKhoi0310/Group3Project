@@ -26,6 +26,27 @@ class Settings(BaseSettings):
     review_provider_api_key: SecretStr = Field(min_length=1)
     ingestion_max_reviews: int = Field(default=50, gt=0)
 
+    @property
+    def firebase_credentials_file(self) -> Path:
+        """Absolute key file path; relative values are from the backend folder."""
+        return ENV_FILE.parent / self.firebase_credentials_path
+
+
+class CorsSettings(BaseSettings):
+    """Separate from Settings because middleware is registered at import time."""
+
+    model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
+
+    cors_allowed_origins: str = "http://localhost:5173"
+
+    @property
+    def origins(self) -> list[str]:
+        return [
+            origin.strip()
+            for origin in self.cors_allowed_origins.split(",")
+            if origin.strip()
+        ]
+
 
 def load_settings(**overrides) -> Settings:
     """Build Settings, reporting problems by variable name only.

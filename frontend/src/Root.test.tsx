@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import Root from "./Root";
+import { createFakeAuth } from "./test/fakeAuth";
 
 const VALID_ENV = {
   VITE_API_BASE_URL: "http://localhost:8000",
@@ -11,7 +12,9 @@ const VALID_ENV = {
 
 describe("Root", () => {
   it("renders the application when configuration is valid", () => {
-    render(<Root env={VALID_ENV} />);
+    render(
+      <Root env={VALID_ENV} createAuthClient={() => createFakeAuth(null)} />,
+    );
 
     expect(screen.getByRole("navigation", { name: "Main" })).toHaveTextContent(
       "ReviewLens AI",
@@ -19,9 +22,17 @@ describe("Root", () => {
   });
 
   it("explains which configuration is missing instead of rendering the app", () => {
-    render(<Root env={{ ...VALID_ENV, VITE_FIREBASE_APP_ID: "" }} />);
+    const createAuthClient = vi.fn(() => createFakeAuth(null));
+
+    render(
+      <Root
+        env={{ ...VALID_ENV, VITE_FIREBASE_APP_ID: "" }}
+        createAuthClient={createAuthClient}
+      />,
+    );
 
     expect(screen.getByRole("alert")).toHaveTextContent("VITE_FIREBASE_APP_ID");
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    expect(createAuthClient).not.toHaveBeenCalled();
   });
 });

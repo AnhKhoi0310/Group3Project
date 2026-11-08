@@ -1,6 +1,6 @@
 import pytest
 
-from app.config import ConfigurationError, load_settings
+from app.config import ENV_FILE, ConfigurationError, CorsSettings, load_settings
 
 SECRET = "super-secret-value"
 VALID_ENV = {
@@ -73,3 +73,21 @@ def test_error_does_not_expose_secret_values(valid_env, monkeypatch):
 
 def test_settings_repr_masks_secrets(valid_env):
     assert SECRET not in repr(load())
+
+
+def test_relative_credentials_path_resolves_from_backend_folder(valid_env):
+    expected = ENV_FILE.parent / "secrets" / "firebase-admin.json"
+
+    assert load().firebase_credentials_file == expected
+
+
+def test_cors_origins_are_split_and_trimmed(monkeypatch):
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "http://a.test, http://b.test ,")
+
+    assert CorsSettings(_env_file=None).origins == ["http://a.test", "http://b.test"]
+
+
+def test_cors_defaults_to_local_frontend(monkeypatch):
+    monkeypatch.delenv("CORS_ALLOWED_ORIGINS", raising=False)
+
+    assert CorsSettings(_env_file=None).origins == ["http://localhost:5173"]
