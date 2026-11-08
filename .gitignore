@@ -1,0 +1,29 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Secrets and service accounts
+secrets/
+service-account*.json
+*firebase-adminsdk*
+firebase-admin*.json
+
+# Claude Code and local Markdown files
+# Team documents that must be committed are re-included below.
+.claude/
+*.md
+!README.md
+!docs/**/*.md
+!ai-transcripts/**
+
+# Python & Node artifacts
+__pycache__/
+.venv/
+.ruff_cache/
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.pytest_cache
