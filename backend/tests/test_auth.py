@@ -1,13 +1,17 @@
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import OperationalError
 
+from app import auth as auth_module
 from app.adapters.identity import (
     IdentityServiceError,
     InvalidTokenError,
     VerifiedIdentity,
 )
 from app.auth import get_token_verifier
+from app.db import get_session
 from app.main import app
+from app.models import User
 
 USER_A = VerifiedIdentity(uid="uid-a", email="a@example.com")
 UNAUTHENTICATED_BODY = {
@@ -36,10 +40,16 @@ class FakeVerifier:
         self.tokens = {t: u for t, u in self.tokens.items() if u.uid != uid}
 
 
+def map_without_database(_session, identity):
+    return User(firebase_uid=identity.uid, email=identity.email)
+
+
 @pytest.fixture
-def verifier():
+def verifier(monkeypatch):
     fake = FakeVerifier()
     app.dependency_overrides[get_token_verifier] = lambda: fake
+    app.dependency_overrides[get_session] = lambda: None
+    monkeypatch.setattr(auth_module, "get_or_create_user", map_without_database)
     yield fake
     app.dependency_overrides.clear()
 
@@ -110,3 +120,29 @@ def test_provider_outage_denies_access_with_friendly_error(client, verifier):
     assert response.status_code == 503
     assert response.json()["code"] == "auth_unavailable"
     assert "uid-a" not in response.text
+
+
+def test_database_outage_denies_access_with_friendly_error(client, monkeypatch):
+    def fail(_session, _identity):
+        raise OperationalError("SELECT secret-sql", {}, Exception("db host down"))
+
+    monkeypatch.setattr(auth_module, "get_or_create_user", fail)
+
+    response = client.get("/api/me", headers=bearer("token-a"))
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "service_unavailable"
+    assert "secret-sql" not in response.text
+    assert "db host down" not in response.text
+
+
+def test_logout_still_works_during_a_database_outage(client, verifier, monkeypatch):
+    def fail(_session, _identity):
+        raise OperationalError("SELECT 1", {}, Exception("down"))
+
+    monkeypatch.setattr(auth_module, "get_or_create_user", fail)
+
+    response = client.post("/api/auth/logout", headers=bearer("token-a"))
+
+    assert response.status_code == 204
+    assert verifier.revoked == ["uid-a"]
