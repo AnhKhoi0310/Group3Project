@@ -64,6 +64,8 @@ These are the same checks CI runs on every pull request.
 | All tests | `pytest` | `npm test` |
 | One test | `pytest tests/test_config.py::test_settings_repr_masks_secrets` | `npx vitest run src/Root.test.tsx -t "valid"` |
 
+Prettier line endings: The frontend uses `frontend/.prettierrc.json` with `endOfLine: "auto"` to accommodate existing line endings on Windows, macOS, and Linux. Run `npm run format:check` from the `frontend/` directory to verify formatting.
+
 ## Pull requests
 
 Work on a feature branch and reference the story ID (for example, S1-015). Every PR needs a short Test Evidence section. Failing checks block merge to `main`.
