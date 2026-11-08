@@ -1,0 +1,81 @@
+name: ReviewLens AI CI Quality Gate
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  push:
+    branches: [ main, master ]
+
+jobs:
+  validate-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rootpassword
+          MYSQL_DATABASE: reviewlens_test
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping -h localhost" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+
+      # Backend(FastAPI/Python) Setups and tests
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Backend Dependencies
+        run: |
+          cd backend
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Backend Lint & Format Checks(Ruff)
+        run: |
+          cd backend
+          ruff check .
+          ruff format --check . 
+
+      - name: Run Backend Unit & Integration Tests (pytest)
+        env:
+          DATABASE_URL: mysql+pymysql://root:rootpassword@localhost:3306/reviewlens_test
+          FIREBASE_PROJECT_ID: mock-project-id
+        run: |
+          cd backend 
+          pytest --maxfail=1 --disable-warnings -v
+
+
+      #Frontend (React/Typescript/Vite) Setup and Test
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm  ci
+
+      - name: Run Frontend Lint & Type Checks
+        run: | 
+          cd frontend
+          npm run lint
+
+      - name: Run Frontend Build
+        run: |
+          cd frontend 
+          npm run build
+          
+    
