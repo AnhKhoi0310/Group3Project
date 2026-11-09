@@ -69,6 +69,7 @@ These are the same checks CI runs on every pull request.
 | All tests | `pytest` | `npm test` |
 | One test | `pytest tests/test_config.py::test_settings_repr_masks_secrets` | `npx vitest run src/Root.test.tsx -t "valid"` |
 
+Prettier line endings: The frontend uses `frontend/.prettierrc.json` with `endOfLine: "auto"` to accommodate existing line endings on Windows, macOS, and Linux. Run `npm run format:check` from the `frontend/` directory to verify formatting.
 Without `TEST_DATABASE_URL`, the MySQL tests are skipped locally. CI always runs them. To run them, point it at a separate database whose name contains `test`, because these tests erase its data:
 
 ```
