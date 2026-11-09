@@ -24,9 +24,7 @@ def setup_auth(user_identity: VerifiedIdentity, db: Session) -> dict:
     user = get_or_create_user(db, user_identity)
     db.commit()
     app.dependency_overrides[get_verified_identity] = lambda: user_identity
-    app.dependency_overrides[get_token_verifier] = lambda: StaticVerifier(
-        user_identity
-    )
+    app.dependency_overrides[get_token_verifier] = lambda: StaticVerifier(user_identity)
     return {
         "Authorization": "Bearer token",
         "X-User-Id": user_identity.uid,
