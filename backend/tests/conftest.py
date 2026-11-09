@@ -9,8 +9,10 @@ from sqlalchemy import create_engine, delete
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
+from app.auth import get_current_user
+from app.db import get_session
 from app.main import app
-from app.models import User
+from app.models import AnalysisTarget, User
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -42,14 +44,22 @@ def session_factory(alembic_config):
 @pytest.fixture
 def db(session_factory):
     with session_factory() as session:
+        session.execute(delete(AnalysisTarget))
         session.execute(delete(User))
         session.commit()
         yield session
 
 
 @pytest.fixture
-def client(db):
-    """Provide a FastAPI TestClient instance for testing routes."""
+def client(db, monkeypatch):
+    """Use a test database and an authenticated fake user for target routes."""
+    user = User(firebase_uid="test-user-1", email="user1@example.com")
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    monkeypatch.setitem(app.dependency_overrides, get_session, lambda: db)
+    monkeypatch.setitem(app.dependency_overrides, get_current_user, lambda: user)
     return TestClient(app)
 
 
@@ -67,14 +77,13 @@ def auth_headers_user2():
 
 @pytest.fixture
 def target_owned_by_user2(db):
-    """Create a target owned by user 2 in the test database and return its ID."""
-    # Create user 2 and a target belonging to user 2,
-    # then commit and return the target id.
-    # Example structure:
-    # user2 = User(id=2, email="user2@example.com")
-    # db.add(user2)
-    # target = Target(id=1, owner_id=user2.id, name="User 2 Target")
-    # db.add(target)
-    # db.commit()
-    # return target.id
-    return 1
+    """Create a target owned by user 2 and return its ID."""
+    user2 = User(firebase_uid="test-user-2", email="user2@example.com")
+    db.add(user2)
+    db.flush()
+
+    target = AnalysisTarget(owner_id=user2.id, name="User 2 Target")
+    db.add(target)
+    db.commit()
+    db.refresh(target)
+    return target.id
