@@ -27,6 +27,7 @@ app.add_middleware(
 )
 app.add_exception_handler(ApiError, handle_api_error)
 app.include_router(auth.router)
+app.include_router(reviews.router)
 
 
 @app.get("/api/health")
