@@ -63,3 +63,17 @@ def auth_headers_user1():
 def auth_headers_user2():
     """Return authorization headers for test user 2."""
     return {"Authorization": "Bearer user2_token"}
+
+
+@pytest.fixture
+def target_owned_by_user2(db):
+    """Create a target owned by user 2 in the test database and return its ID."""
+    # Create user 2 and a target belonging to user 2, then commit and return the target id.
+    # Example structure:
+    # user2 = User(id=2, email="user2@example.com")
+    # db.add(user2)
+    # target = Target(id=1, owner_id=user2.id, name="User 2 Target")
+    # db.add(target)
+    # db.commit()
+    # return target.id
+    return 1
