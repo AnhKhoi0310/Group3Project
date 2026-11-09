@@ -3,8 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.db import get_session
-from app.models.target import AnalysisTarget
-from app.models.user import User
+from app.models.models import AnalysisTarget, User
 from app.schemas.target import AnalysisTargetRead
 from app.services.target_service import (
     get_target_for_owner,
