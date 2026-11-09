@@ -14,7 +14,6 @@ def get_owned_target_or_404(
     target_id: int, owner_id: int, db: Session
 ) -> AnalysisTarget:
     """Validate target existence and ownership.
-    
     Returns 404 for missing or unowned targets to prevent user enumeration.
     """
     target = db.scalar(
@@ -39,9 +38,7 @@ def list_target_reviews(
 ):
     """Retrieve reviews for a target owned by the authenticated user."""
     target = get_owned_target_or_404(target_id, current_user.id, db)
-    reviews = db.scalars(
-        select(Review).where(Review.target_id == target.id)
-    ).all()
+    reviews = db.scalars(select(Review).where(Review.target_id == target.id)).all()
     return reviews
 
 
