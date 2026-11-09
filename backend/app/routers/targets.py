@@ -29,9 +29,7 @@ def get_target(
     current_user: User = Depends(get_current_user),
 ) -> AnalysisTarget:
     """Get a specific target only if it belongs to the authenticated user."""
-    target = get_target_for_owner(
-        db, target_id=target_id, owner_id=current_user.id
-    )
+    target = get_target_for_owner(db, target_id=target_id, owner_id=current_user.id)
     if not target:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
