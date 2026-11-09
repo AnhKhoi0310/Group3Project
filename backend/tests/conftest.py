@@ -4,10 +4,12 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, delete
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
+from app.main import app
 from app.models import User
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
