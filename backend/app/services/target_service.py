@@ -1,8 +1,11 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.models.target import AnalysisTarget
 
-def get_target_for_owner(db: Session, target_id: int, owner_id: int) -> AnalysisTarget | None:
+def get_target_for_owner(
+    db: Session, target_id: int, owner_id: int
+) -> AnalysisTarget | None:
     """Fetch an analysis target only if it belongs to the authenticated owner."""
     return db.scalar(
         select(AnalysisTarget).where(
