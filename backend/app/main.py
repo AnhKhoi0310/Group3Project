@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api import api_router
 from app.auth import get_token_verifier
 from app.config import CorsSettings, get_settings
 from app.errors import ApiError, handle_api_error
@@ -26,7 +27,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 app.add_exception_handler(ApiError, handle_api_error)
-app.include_router(auth.router)
+# app.include_router(auth.router)
 app.include_router(api_router)
 
 
