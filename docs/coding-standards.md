@@ -81,6 +81,8 @@ Pin exact Python versions in `requirements.txt` (runtime) or `requirements-dev.t
 Each feature story adds or updates at least one automated test, including the failure path.
 
 - Test observable behavior, not internals.
+
+Today auth.py, db.py, errors.py, and models.py are single files beside main.py and config.py. Split models.py into a models/ package once it holds more than a few models. Add services/ and the other missing folders as stories need them, in these locations.
 - CI never calls a live provider. Use the fake `ReviewSourceClient` and the committed fixture.
 - Replace `get_current_user` in tests with fake User A and User B identities.
 - Ownership tests need two users and must prove User B is denied and User A's data is unchanged.
