@@ -8,7 +8,7 @@ from app.api import api_router
 from app.auth import get_token_verifier
 from app.config import CorsSettings, get_settings
 from app.errors import ApiError, handle_api_error
-from app.routers import auth
+#from app.routers import auth
 
 
 @asynccontextmanager
