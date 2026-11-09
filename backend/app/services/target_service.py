@@ -13,6 +13,7 @@ def get_target_for_owner(
             AnalysisTarget.owner_id == owner_id,
         )
     )
+    
 
 def list_targets_for_owner(db: Session, owner_id: int) -> list[AnalysisTarget]:
     """List all analysis targets belonging to the authenticated owner."""
