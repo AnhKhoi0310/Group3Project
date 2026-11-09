@@ -1,7 +1,7 @@
-from app.models.target import AnalysisTarget
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+from app.models.target import AnalysisTarget
 
 def get_target_for_owner(
     db: Session, target_id: int, owner_id: int
