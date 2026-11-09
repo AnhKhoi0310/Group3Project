@@ -16,7 +16,7 @@ router = APIRouter(prefix="/targets", tags=["targets"])
 
 @router.get("/", response_model=list[AnalysisTargetRead])
 def list_targets(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[AnalysisTarget]:
     """List all analysis targets for the authenticated user."""
@@ -26,7 +26,7 @@ def list_targets(
 @router.get("/{target_id}", response_model=AnalysisTargetRead)
 def get_target(
     target_id: int,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> AnalysisTarget:
     """Get a specific target only if it belongs to the authenticated user."""
