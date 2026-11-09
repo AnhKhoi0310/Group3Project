@@ -51,3 +51,15 @@ def db(session_factory):
 def client(db):
     """Provide a FastAPI TestClient instance for testing routes."""
     return TestClient(app)
+
+
+@pytest.fixture
+def auth_headers_user1():
+    """Return authorization headers for test user 1."""
+    return {"Authorization": "Bearer user1_token"}
+
+
+@pytest.fixture
+def auth_headers_user2():
+    """Return authorization headers for test user 2."""
+    return {"Authorization": "Bearer user2_token"}
