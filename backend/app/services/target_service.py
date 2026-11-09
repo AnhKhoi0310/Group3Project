@@ -1,4 +1,5 @@
 from app.models.target import AnalysisTarget
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
