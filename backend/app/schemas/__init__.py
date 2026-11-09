@@ -1,5 +1,1 @@
-from app.schemas.target import (
-    AnalysisTargetBase,
-    AnalysisTargetCreate,
-    AnalysisTargetRead,
-)
+from app.schemas.target import AnalysisTargetBase, AnalysisTargetCreate, AnalysisTargetRead
