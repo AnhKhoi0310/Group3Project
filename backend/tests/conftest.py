@@ -51,3 +51,49 @@ def db(session_factory):
 def client(db):
     """Provide a FastAPI TestClient instance for testing routes."""
     return TestClient(app)
+
+
+class StaticVerifier:
+    def __init__(self, identity: VerifiedIdentity):
+        self.identity = identity
+
+    def verify(self, token: str):
+        return self.identity
+
+    def revoke(self, uid: str):
+        pass
+
+
+@pytest.fixture
+def user1_identity():
+    return VerifiedIdentity(uid="user1-firebase-uid", email="user1@example.com")
+
+
+@pytest.fixture
+def user2_identity():
+    return VerifiedIdentity(uid="user2-firebase-uid", email="user2@example.com")
+
+
+@pytest.fixture
+def auth_headers_user1(client, user1_identity, db):
+    from app.repositories.users import get_or_create_user
+    user = get_or_create_user(db, user1_identity)
+    db.commit()
+    
+    app.dependency_overrides[get_verified_identity] = lambda: user1_identity
+    app.dependency_overrides[get_token_verifier] = lambda: StaticVerifier(user1_identity)
+    yield {"Authorization": "Bearer token-user1", "X-User-Id": user1_identity.uid, "X-Owner-Id": str(user.id)}
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def target_owned_by_user2(client, user2_identity, db):
+    from app.repositories.users import get_or_create_user
+    user2 = get_or_create_user(db, user2_identity)
+    db.commit()
+
+    target = AnalysisTarget(owner_id=user2.id, name="User 2 Secret Target")
+    db.add(target)
+    db.commit()
+    db.refresh(target)
+    return target.id
