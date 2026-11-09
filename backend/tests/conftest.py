@@ -43,3 +43,9 @@ def db(session_factory):
         session.execute(delete(User))
         session.commit()
         yield session
+
+
+@pytest.fixture
+def client(db):
+    """Provide a FastAPI TestClient instance for testing routes."""
+    return TestClient(app)
