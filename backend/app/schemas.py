@@ -1,7 +1,12 @@
 from datetime import datetime
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    field_validator,
+    model_validator,
+)
 
 from app.adapters.review_source import (
     ReviewSourceError,
@@ -78,6 +83,61 @@ class TargetCreate(BaseModel):
         if not _identifies_a_place(value):
             raise ValueError(URL_NO_PLACE)
         return value
+
+
+class TargetUpdate(BaseModel):
+    """Partial update body. Ownership and platform are never client-controlled."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str | None = None
+    source_url: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def check_name(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("Name cannot be null.")
+
+        value = value.strip()
+        if not value:
+            raise ValueError(NAME_REQUIRED)
+        if len(value) > MAX_NAME_LENGTH:
+            raise ValueError(f"Use {MAX_NAME_LENGTH} characters or fewer.")
+        return value
+
+    @field_validator("source_url")
+    @classmethod
+    def check_source_url(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("Source URL cannot be null.")
+
+        value = value.strip()
+        if not value:
+            raise ValueError(URL_REQUIRED)
+        if len(value) > MAX_URL_LENGTH:
+            raise ValueError(URL_MALFORMED)
+        try:
+            parsed = urlparse(value)
+            host = (parsed.hostname or "").lower()
+        except ValueError:
+            raise ValueError(URL_MALFORMED) from None
+        if parsed.scheme != "https" or not host:
+            raise ValueError(URL_MALFORMED)
+        if host not in GOOGLE_HOSTS or not parsed.path.startswith("/maps"):
+            raise ValueError(URL_WRONG_SITE)
+        if not _identifies_a_place(value):
+            raise ValueError(URL_NO_PLACE)
+        return value
+
+    @model_validator(mode="after")
+    def require_at_least_one_change(self):
+        if (
+            "name" not in self.model_fields_set
+            and "source_url" not in self.model_fields_set
+        ):
+            raise ValueError("Provide at least one field to update.")
+        return self
 
 
 class TargetRead(BaseModel):
