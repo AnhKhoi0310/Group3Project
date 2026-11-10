@@ -91,7 +91,9 @@ def test_owner_can_start_ingestion_from_the_stored_source_url(client, fetcher):
 
     assert response.status_code == 200
     assert response.json() == {
+        "attempt_id": 1,
         "target_id": target["id"],
+        "status": "succeeded",
         "reviews_found": 1,
         "reviews_skipped": 0,
     }
