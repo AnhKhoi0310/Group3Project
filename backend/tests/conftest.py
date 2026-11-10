@@ -50,10 +50,11 @@ def db(session_factory):
 
 @pytest.fixture
 def client(db):
-    """Use the test database session for requests made by API tests."""
+    """Use the test database without triggering application startup checks."""
     app.dependency_overrides[get_session] = lambda: db
     try:
-        with TestClient(app) as test_client:
-            yield test_client
+        # Do not use TestClient as a context manager: that runs the lifespan
+        # handler, which requires production app configuration during tests.
+        yield TestClient(app)
     finally:
         app.dependency_overrides.clear()
