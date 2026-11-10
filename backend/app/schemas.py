@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from pydantic import (
     BaseModel,
     ConfigDict,
+    Field,
     field_validator,
     model_validator,
 )
@@ -138,6 +139,23 @@ class TargetUpdate(BaseModel):
         ):
             raise ValueError("Provide at least one field to update.")
         return self
+
+
+class ReviewCreate(BaseModel):
+    """Client-supplied review fields. Ownership and platform are server-controlled."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    text: str = Field(min_length=1)
+    rating: float = Field(ge=1, le=5)
+
+    @field_validator("text")
+    @classmethod
+    def check_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Review text is required.")
+        return value
 
 
 class TargetRead(BaseModel):

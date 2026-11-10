@@ -19,8 +19,13 @@ from app.repositories.ingestions import (
     create_attempt,
     fail_attempt,
 )
-from app.repositories.reviews import list_reviews_for_target, save_reviews
+from app.repositories.reviews import (
+    create_review,
+    list_reviews_for_target,
+    save_reviews,
+)
 from app.repositories.targets import get_target_for_owner
+from app.schemas import ReviewCreate
 from app.services.ingestion import IngestionError, collect_reviews
 
 logger = logging.getLogger(__name__)
@@ -219,6 +224,59 @@ def start_ingestion(
         reviews_found=completed.reviews_found,
         reviews_skipped=completed.reviews_skipped,
     )
+
+
+@router.post(
+    "/{target_id}/reviews",
+    response_model=ReviewRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_target_review(
+    target_id: int,
+    payload: ReviewCreate,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_session)],
+) -> ReviewRead:
+    """Create a review only when the authenticated user owns its parent target."""
+
+    try:
+        # Check parent ownership before performing any child-resource operation.
+        target = get_target_for_owner(
+            session,
+            target_id,
+            owner_id=user.id,
+        )
+
+        if target is None:
+            raise _target_not_found()
+
+        # The client cannot choose the target ID or source platform.
+        review = create_review(
+            session,
+            target_id=target.id,
+            source_platform=target.platform,
+            text=payload.text,
+            rating=payload.rating,
+        )
+
+        return review
+
+    except ApiError:
+        raise
+
+    except SQLAlchemyError:
+        session.rollback()
+        logger.exception(
+            "Could not create review for target %s and user %s",
+            target_id,
+            user.id,
+        )
+
+        raise ApiError(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "unexpected",
+            "Something went wrong on our side. Please try again.",
+        ) from None
 
 
 @router.get("/{target_id}/reviews", response_model=list[ReviewRead])
