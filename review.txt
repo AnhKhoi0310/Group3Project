@@ -1,0 +1,618 @@
+diff --git a/backend/app/models/__init__.py b/backend/app/models/__init__.py
+index 5b78aa4..502e433 100644
+--- a/backend/app/models/__init__.py
++++ b/backend/app/models/__init__.py
+@@ -1,3 +1,5 @@
+ from app.models.models import PLATFORM_GOOGLE_MAPS as PLATFORM_GOOGLE_MAPS
+ from app.models.models import AnalysisTarget as AnalysisTarget
++from app.models.models import IngestionAttempt as IngestionAttempt
++from app.models.models import Review as Review
+ from app.models.models import User as User
+diff --git a/backend/app/models/models.py b/backend/app/models/models.py
+index 4918d7c..468a5ec 100644
+--- a/backend/app/models/models.py
++++ b/backend/app/models/models.py
+@@ -1,6 +1,16 @@
+ from datetime import datetime
+ 
+-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, func
++from sqlalchemy import (
++    BigInteger,
++    DateTime,
++    Float,
++    ForeignKey,
++    Index,
++    String,
++    Text,
++    UniqueConstraint,
++    func,
++)
+ from sqlalchemy.orm import Mapped, mapped_column
+ 
+ from app.db import Base
+@@ -38,3 +48,55 @@ class AnalysisTarget(Base):
+     updated_at: Mapped[datetime] = mapped_column(
+         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+     )
++
++
++class Review(Base):
++    """A normalized review owned transitively through its analysis target."""
++
++    __tablename__ = "reviews"
++    __table_args__ = (
++        UniqueConstraint(
++            "target_id",
++            "source_review_id",
++            name="uq_reviews_target_source_review",
++        ),
++        Index("ix_reviews_target_id", "target_id"),
++    )
++
++    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
++    target_id: Mapped[int] = mapped_column(
++        BigInteger,
++        ForeignKey("analysis_targets.id", ondelete="CASCADE"),
++        nullable=False,
++    )
++    source_review_id: Mapped[str | None] = mapped_column(String(255))
++    source_platform: Mapped[str] = mapped_column(String(50), nullable=False)
++    reviewer_name: Mapped[str | None] = mapped_column(String(255))
++    rating: Mapped[float] = mapped_column(Float, nullable=False)
++    text: Mapped[str] = mapped_column(Text, nullable=False)
++    review_date: Mapped[str | None] = mapped_column(String(255))
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime, server_default=func.now(), nullable=False
++    )
++
++
++class IngestionAttempt(Base):
++    """The recorded outcome of one attempt to collect reviews for a target."""
++
++    __tablename__ = "ingestion_attempts"
++    __table_args__ = (Index("ix_ingestion_attempts_target_id", "target_id"),)
++
++    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
++    target_id: Mapped[int] = mapped_column(
++        BigInteger,
++        ForeignKey("analysis_targets.id", ondelete="CASCADE"),
++        nullable=False,
++    )
++    status: Mapped[str] = mapped_column(String(20), nullable=False)
++    reviews_found: Mapped[int] = mapped_column(default=0, nullable=False)
++    reviews_skipped: Mapped[int] = mapped_column(default=0, nullable=False)
++    failure_category: Mapped[str | None] = mapped_column(String(50))
++    started_at: Mapped[datetime] = mapped_column(
++        DateTime, server_default=func.now(), nullable=False
++    )
++    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+diff --git a/backend/app/routers/ingestions.py b/backend/app/routers/ingestions.py
+index 16de55f..1ccdcac 100644
+--- a/backend/app/routers/ingestions.py
++++ b/backend/app/routers/ingestions.py
+@@ -3,7 +3,7 @@ from collections.abc import Callable
+ from typing import Annotated
+ 
+ from fastapi import APIRouter, Depends, status
+-from pydantic import BaseModel
++from pydantic import BaseModel, ConfigDict
+ from sqlalchemy.exc import SQLAlchemyError
+ from sqlalchemy.orm import Session
+ 
+@@ -12,7 +12,13 @@ from app.auth import get_current_user
+ from app.config import get_settings
+ from app.db import get_session
+ from app.errors import ApiError
+-from app.models import User
++from app.models import IngestionAttempt, Review, User
++from app.repositories.ingestions import (
++    complete_attempt,
++    create_attempt,
++    fail_attempt,
++)
++from app.repositories.reviews import list_reviews_for_target, save_reviews
+ from app.repositories.targets import get_target_for_owner
+ from app.services.ingestion import IngestionError, collect_reviews
+ 
+@@ -48,11 +54,27 @@ INGESTION_ERRORS: dict[str, tuple[int, str]] = {
+ 
+ 
+ class IngestionRead(BaseModel):
++    attempt_id: int
+     target_id: int
++    status: str
+     reviews_found: int
+     reviews_skipped: int
+ 
+ 
++class ReviewRead(BaseModel):
++    model_config = ConfigDict(from_attributes=True)
++
++    id: int
++    target_id: int
++    source_review_id: str | None
++    source_platform: str
++    reviewer_name: str | None
++    rating: float
++    text: str
++    review_date: str | None
++    created_at: object
++
++
+ def get_review_fetcher() -> Callable[[str], list[dict]]:
+     """The review source. Tests replace this so no live provider is called."""
+ 
+@@ -63,6 +85,29 @@ def get_review_fetcher() -> Callable[[str], list[dict]]:
+     return fetch
+ 
+ 
++def _target_not_found() -> ApiError:
++    return ApiError(
++        status.HTTP_404_NOT_FOUND,
++        "target_not_found",
++        "We couldn't find that target. It may not exist or you may not have access.",
++    )
++
++
++def _record_failure(
++    session: Session,
++    attempt: IngestionAttempt,
++    category: str,
++) -> None:
++    try:
++        fail_attempt(session, attempt, category)
++    except SQLAlchemyError:
++        session.rollback()
++        logger.exception(
++            "Could not record persistence failure for attempt %s",
++            attempt.id,
++        )
++
++
+ @router.post("/{target_id}/ingestions", response_model=IngestionRead)
+ def start_ingestion(
+     target_id: int,
+@@ -70,7 +115,7 @@ def start_ingestion(
+     session: Annotated[Session, Depends(get_session)],
+     fetch: Annotated[Callable[[str], list[dict]], Depends(get_review_fetcher)],
+ ) -> IngestionRead:
+-    # Ownership is checked first, before any provider call or review processing.
++    # Ownership is checked before creating an attempt or contacting the provider.
+     try:
+         target = get_target_for_owner(session, target_id, owner_id=user.id)
+     except SQLAlchemyError:
+@@ -80,16 +125,22 @@ def start_ingestion(
+             "unexpected",
+             "Something went wrong on our side. Please try again.",
+         ) from None
++
+     if target is None:
+-        # Same response whether it doesn't exist or belongs to someone else.
++        raise _target_not_found()
++
++    try:
++        attempt = create_attempt(session, target.id)
++    except SQLAlchemyError:
++        session.rollback()
++        logger.exception("Could not create ingestion attempt for target %s", target.id)
+         raise ApiError(
+-            status.HTTP_404_NOT_FOUND,
+-            "target_not_found",
+-            "We couldn't find that target. It may not exist or you may not "
+-            "have access.",
+-        )
++            status.HTTP_500_INTERNAL_SERVER_ERROR,
++            "unexpected",
++            "Something went wrong on our side. Please try again.",
++        ) from None
+ 
+-    # The source URL always comes from the stored target, never from the request.
++    # The source URL always comes from the stored target, never the request.
+     try:
+         outcome = collect_reviews(target.id, target.source_url, fetch)
+     except IngestionError as exc:
+@@ -99,13 +150,74 @@ def start_ingestion(
+             exc.category,
+             exc_info=True,
+         )
++        _record_failure(session, attempt, exc.category)
+         status_code, message = INGESTION_ERRORS.get(
+             exc.category, INGESTION_ERRORS["unexpected"]
+         )
+-        raise ApiError(status_code, f"ingestion_{exc.category}", message) from None
++        raise ApiError(
++            status_code,
++            f"ingestion_{exc.category}",
++            message,
++        ) from None
++
++    try:
++        save_reviews(
++            session,
++            target_id=target.id,
++            source_platform=target.platform,
++            reviews=outcome.reviews,
++        )
++        completed = complete_attempt(
++            session,
++            attempt,
++            reviews_found=outcome.reviews_found,
++            reviews_skipped=outcome.reviews_skipped,
++        )
++    except SQLAlchemyError:
++        session.rollback()
++        logger.exception("Could not persist ingestion for target %s", target.id)
++        try:
++            failed_attempt = session.get(IngestionAttempt, attempt.id)
++            if failed_attempt is not None:
++                fail_attempt(session, failed_attempt, "persistence_error")
++        except SQLAlchemyError:
++            session.rollback()
++            logger.exception(
++                "Could not record persistence failure for attempt %s", attempt.id
++            )
++        raise ApiError(
++            status.HTTP_500_INTERNAL_SERVER_ERROR,
++            "ingestion_persistence_error",
++            "We collected the reviews but couldn't save them. Please try again.",
++        ) from None
+ 
+     return IngestionRead(
++        attempt_id=completed.id,
+         target_id=target.id,
+-        reviews_found=outcome.reviews_found,
+-        reviews_skipped=outcome.reviews_skipped,
++        status=completed.status,
++        reviews_found=completed.reviews_found,
++        reviews_skipped=completed.reviews_skipped,
+     )
++
++
++@router.get("/{target_id}/reviews", response_model=list[ReviewRead])
++def get_target_reviews(
++    target_id: int,
++    user: Annotated[User, Depends(get_current_user)],
++    session: Annotated[Session, Depends(get_session)],
++) -> list[Review]:
++    """Return reviews only after verifying ownership of their parent target."""
++    try:
++        target = get_target_for_owner(session, target_id, owner_id=user.id)
++        if target is None:
++            raise _target_not_found()
++        return list_reviews_for_target(session, target.id)
++    except ApiError:
++        raise
++    except SQLAlchemyError:
++        logger.exception("Could not load reviews for target %s", target_id)
++        raise ApiError(
++            status.HTTP_500_INTERNAL_SERVER_ERROR,
++            "unexpected",
++            "Something went wrong on our side. Please try again.",
++        ) from None
+diff --git a/backend/app/services/ingestion.py b/backend/app/services/ingestion.py
+index 150ee1d..c2eb215 100644
+--- a/backend/app/services/ingestion.py
++++ b/backend/app/services/ingestion.py
+@@ -1,23 +1,24 @@
+-"""Collect and normalize reviews for one target.
+-
+-Persistence and run state are later stories (S1-022, S1-023).
+-"""
++"""Collect and normalize reviews for one analysis target."""
+ 
+ from collections.abc import Callable
+ from dataclasses import dataclass
+ 
+ from app.adapters.review_source import ReviewSourceError
+-from app.services.normalizer import ReviewNormalizationError, normalize_reviews
++from app.services.normalizer import (
++    ReviewNormalizationError,
++    normalize_reviews_with_skips,
++)
+ 
+ 
+ @dataclass(frozen=True)
+ class IngestionOutcome:
++    reviews: list[dict]
+     reviews_found: int
+     reviews_skipped: int
+ 
+ 
+ class IngestionError(Exception):
+-    """Ingestion failed. The category is one of the documented failure categories."""
++    """Ingestion failed. The category is safe to record and report."""
+ 
+     def __init__(self, category: str) -> None:
+         super().__init__(category)
+@@ -29,7 +30,7 @@ def collect_reviews(
+     source_url: str,
+     fetch: Callable[[str], list[dict]],
+ ) -> IngestionOutcome:
+-    """Fetch reviews from the target's own source URL and normalize them."""
++    """Fetch from the target's stored URL and return only usable reviews."""
+     if not source_url or not source_url.strip():
+         raise IngestionError("invalid_source")
+ 
+@@ -37,16 +38,19 @@ def collect_reviews(
+         raw_reviews = fetch(source_url)
+     except ReviewSourceError as exc:
+         raise IngestionError(exc.category) from exc
+-    except ValueError as exc:
++    except Exception as exc:
+         raise IngestionError("unexpected") from exc
+ 
+     try:
+-        normalized = normalize_reviews(raw_reviews, str(target_id))
++        reviews, skipped = normalize_reviews_with_skips(
++            raw_reviews,
++            str(target_id),
++        )
+     except ReviewNormalizationError as exc:
+         raise IngestionError("unexpected") from exc
+ 
+-    usable = [r for r in normalized if r["text"] and r["rating"] is not None]
+     return IngestionOutcome(
+-        reviews_found=len(usable),
+-        reviews_skipped=len(normalized) - len(usable),
++        reviews=reviews,
++        reviews_found=len(reviews),
++        reviews_skipped=skipped,
+     )
+diff --git a/backend/app/services/normalizer.py b/backend/app/services/normalizer.py
+index 3e6c86b..47e712c 100644
+--- a/backend/app/services/normalizer.py
++++ b/backend/app/services/normalizer.py
+@@ -1,15 +1,14 @@
+ """Normalize raw Google Maps reviews into a consistent format."""
+ 
++import math
++
+ 
+ class ReviewNormalizationError(ValueError):
+     """A raw review contains invalid data."""
+ 
+ 
+-def normalize_review(
+-    raw_review: dict,
+-    place_id: str,
+-) -> dict:
+-    """Convert a SerpApi review into a consistent review dictionary."""
++def normalize_review(raw_review: dict, place_id: str) -> dict:
++    """Convert one SerpApi review into the canonical review structure."""
+     if not isinstance(raw_review, dict):
+         raise ReviewNormalizationError("Review must be a dictionary.")
+ 
+@@ -22,43 +21,30 @@ def normalize_review(
+         if isinstance(rating, bool) or not isinstance(rating, (int, float)):
+             raise ReviewNormalizationError("Review rating must be numeric.")
+ 
+-        if not 1 <= rating <= 5:
++        if not math.isfinite(rating) or not 1 <= rating <= 5:
+             raise ReviewNormalizationError("Review rating must be between 1 and 5.")
+ 
+         rating = float(rating)
+ 
+-    user = raw_review.get("user") or {}
++    user = raw_review.get("user")
+     if not isinstance(user, dict):
+         user = {}
+ 
+     author = user.get("name")
+-    if isinstance(author, str):
+-        author = author.strip() or None
+-    else:
+-        author = None
++    author = author.strip() or None if isinstance(author, str) else None
+ 
+     text = raw_review.get("snippet")
+     if not isinstance(text, str) or not text.strip():
+         extracted = raw_review.get("extracted_snippet")
+-        if isinstance(extracted, dict):
+-            text = extracted.get("original")
++        text = extracted.get("original") if isinstance(extracted, dict) else None
+ 
+-    if isinstance(text, str):
+-        text = text.strip() or None
+-    else:
+-        text = None
++    text = text.strip() or None if isinstance(text, str) else None
+ 
+     date = raw_review.get("date")
+-    if isinstance(date, str):
+-        date = date.strip() or None
+-    else:
+-        date = None
++    date = date.strip() or None if isinstance(date, str) else None
+ 
+     review_id = raw_review.get("review_id")
+-    if isinstance(review_id, str):
+-        review_id = review_id.strip() or None
+-    else:
+-        review_id = None
++    review_id = review_id.strip() or None if isinstance(review_id, str) else None
+ 
+     return {
+         "review_id": review_id,
+@@ -71,11 +57,15 @@ def normalize_review(
+     }
+ 
+ 
+-def normalize_reviews(
+-    raw_reviews: list[dict],
++def normalize_reviews_with_skips(
++    raw_reviews: list,
+     place_id: str,
+-) -> list[dict]:
+-    """Normalize a batch of reviews and remove duplicate review IDs."""
++) -> tuple[list[dict], int]:
++    """Normalize a batch, skipping malformed, incomplete, and duplicate records.
++
++    A usable canonical review must have non-empty text and a rating from 1 to 5.
++    The returned integer counts every skipped record.
++    """
+     if not isinstance(raw_reviews, list):
+         raise ReviewNormalizationError("Reviews must be a list.")
+ 
+@@ -84,18 +74,32 @@ def normalize_reviews(
+ 
+     normalized_reviews = []
+     seen_review_ids = set()
++    skipped = 0
+ 
+     for raw_review in raw_reviews:
+-        normalized = normalize_review(raw_review, place_id)
++        try:
++            normalized = normalize_review(raw_review, place_id)
++        except ReviewNormalizationError:
++            skipped += 1
++            continue
+ 
+-        review_id = normalized["review_id"]
++        if not normalized["text"] or normalized["rating"] is None:
++            skipped += 1
++            continue
+ 
++        review_id = normalized["review_id"]
+         if review_id is not None:
+             if review_id in seen_review_ids:
++                skipped += 1
+                 continue
+-
+             seen_review_ids.add(review_id)
+ 
+         normalized_reviews.append(normalized)
+ 
+-    return normalized_reviews
++    return normalized_reviews, skipped
++
++
++def normalize_reviews(raw_reviews: list, place_id: str) -> list[dict]:
++    """Compatibility wrapper returning only usable normalized reviews."""
++    normalized, _skipped = normalize_reviews_with_skips(raw_reviews, place_id)
++    return normalized
+diff --git a/backend/tests/conftest.py b/backend/tests/conftest.py
+index 40e37ee..7356d64 100644
+--- a/backend/tests/conftest.py
++++ b/backend/tests/conftest.py
+@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, delete
+ from sqlalchemy.engine import make_url
+ from sqlalchemy.orm import sessionmaker
+ 
+-from app.models import AnalysisTarget, User
++from app.models import AnalysisTarget, IngestionAttempt, Review, User
+ 
+ ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
+ 
+@@ -20,9 +20,10 @@ def alembic_config():
+         if os.environ.get("CI"):
+             pytest.fail("TEST_DATABASE_URL must be set in CI")
+         pytest.skip("Set TEST_DATABASE_URL to run the MySQL tests")
+-    # These tests wipe tables, so never let them point at a real database.
++
+     if "test" not in (make_url(url).database or ""):
+         pytest.fail("TEST_DATABASE_URL must name a database containing 'test'")
++
+     config = Config(str(ALEMBIC_INI))
+     config.attributes["database_url"] = url
+     return config
+@@ -40,6 +41,8 @@ def session_factory(alembic_config):
+ @pytest.fixture
+ def db(session_factory):
+     with session_factory() as session:
++        session.execute(delete(IngestionAttempt))
++        session.execute(delete(Review))
+         session.execute(delete(AnalysisTarget))
+         session.execute(delete(User))
+         session.commit()
+diff --git a/backend/tests/test_normalizer.py b/backend/tests/test_normalizer.py
+index 9e5843b..f0aac0d 100644
+--- a/backend/tests/test_normalizer.py
++++ b/backend/tests/test_normalizer.py
+@@ -6,6 +6,7 @@ from app.services.normalizer import (
+     ReviewNormalizationError,
+     normalize_review,
+     normalize_reviews,
++    normalize_reviews_with_skips,
+ )
+ 
+ 
+@@ -70,9 +71,21 @@ def test_normalize_reviews_multiple_reviews():
+ def test_normalize_reviews_removes_duplicate_ids():
+     """Keep the first occurrence of each review ID."""
+     raw_reviews = [
+-        {"review_id": "r1", "rating": 5},
+-        {"review_id": "r1", "rating": 1},
+-        {"review_id": "r2", "rating": 4},
++        {
++            "review_id": "r1",
++            "rating": 5,
++            "snippet": "Excellent service.",
++        },
++        {
++            "review_id": "r1",
++            "rating": 1,
++            "snippet": "Poor service.",
++        },
++        {
++            "review_id": "r2",
++            "rating": 4,
++            "snippet": "Good experience.",
++        },
+     ]
+ 
+     results = normalize_reviews(raw_reviews, "place-123")
+@@ -141,15 +154,29 @@ def test_normalize_review_handles_malformed_optional_fields():
+     assert result["rating"] == 3.0
+ 
+ 
+-def test_normalize_reviews_rejects_invalid_item():
+-    """An invalid review inside a batch raises a clear error."""
++def test_normalize_reviews_skips_invalid_item():
++    """Skip an invalid review while retaining valid reviews."""
+     raw_reviews = [
+-        {"review_id": "r1", "rating": 5},
+-        {"review_id": "r2", "rating": "not a rating"},
++        {
++            "review_id": "r1",
++            "rating": 5,
++            "snippet": "Excellent service.",
++        },
++        {
++            "review_id": "r2",
++            "rating": "not a rating",
++            "snippet": "Poor service.",
++        },
+     ]
+ 
+-    with pytest.raises(ReviewNormalizationError):
+-        normalize_reviews(raw_reviews, "place-123")
++    results, skipped = normalize_reviews_with_skips(
++        raw_reviews,
++        "place-123",
++    )
++
++    assert len(results) == 1
++    assert results[0]["review_id"] == "r1"
++    assert skipped == 1
+ 
+ 
+ def test_normalize_review_trims_whitespace():
+@@ -191,8 +218,16 @@ def test_normalize_review_converts_blank_fields_to_none():
+ def test_normalize_reviews_deduplicates_ids_with_whitespace():
+     """Review IDs are cleaned before duplicate detection."""
+     raw_reviews = [
+-        {"review_id": "r1", "rating": 5},
+-        {"review_id": "  r1  ", "rating": 2},
++        {
++            "review_id": "r1",
++            "rating": 5,
++            "snippet": "Excellent service.",
++        },
++        {
++            "review_id": "  r1  ",
++            "rating": 2,
++            "snippet": "Disappointing experience.",
++        },
+     ]
+ 
+     results = normalize_reviews(raw_reviews, "place-123")

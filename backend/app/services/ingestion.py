@@ -49,6 +49,11 @@ def collect_reviews(
     except ReviewNormalizationError as exc:
         raise IngestionError("unexpected") from exc
 
+    # An empty provider response is valid, but a non-empty response
+    # containing no usable reviews indicates malformed provider data.
+    if raw_reviews and not reviews:
+        raise IngestionError("unexpected")
+
     return IngestionOutcome(
         reviews=reviews,
         reviews_found=len(reviews),
