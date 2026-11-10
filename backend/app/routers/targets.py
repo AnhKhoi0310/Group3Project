@@ -13,8 +13,9 @@ from app.repositories.targets import (
     create_target,
     get_target_for_owner,
     list_targets_for_owner,
+    update_target_for_owner,
 )
-from app.schemas import TargetCreate, TargetRead
+from app.schemas import TargetCreate, TargetRead, TargetUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,44 @@ def list_my_targets(
         ) from None
 
 
+@router.patch("/{target_id}", response_model=TargetRead)
+def update_my_target(
+    target_id: int,
+    payload: TargetUpdate,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_session)],
+) -> AnalysisTarget:
+    try:
+        target = update_target_for_owner(
+            session,
+            target_id,
+            owner_id=user.id,
+            **payload.model_dump(exclude_unset=True, exclude_none=True),
+        )
+    except SQLAlchemyError:
+        session.rollback()
+        logger.exception(
+            "Could not update target %s for user %s",
+            target_id,
+            user.id,
+        )
+        raise ApiError(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "unexpected",
+            "Something went wrong on our side. Please try again.",
+        ) from None
+
+    if target is None:
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            "target_not_found",
+            "We couldn't find that target. It may not exist or you may not "
+            "have access.",
+        )
+
+    return target
+
+
 @router.get("/{target_id}", response_model=TargetRead)
 def get_my_target(
     target_id: int,
@@ -76,6 +115,7 @@ def get_my_target(
             "unexpected",
             "Something went wrong on our side. Please try again.",
         ) from None
+
     if target is None:
         # Same response whether it doesn't exist or belongs to someone else.
         raise ApiError(
@@ -84,4 +124,5 @@ def get_my_target(
             "We couldn't find that target. It may not exist or you may not "
             "have access.",
         )
+
     return target
