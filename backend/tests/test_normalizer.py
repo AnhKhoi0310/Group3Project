@@ -6,6 +6,7 @@ from app.services.normalizer import (
     ReviewNormalizationError,
     normalize_review,
     normalize_reviews,
+    normalize_reviews_with_skips,
 )
 
 
@@ -70,9 +71,21 @@ def test_normalize_reviews_multiple_reviews():
 def test_normalize_reviews_removes_duplicate_ids():
     """Keep the first occurrence of each review ID."""
     raw_reviews = [
-        {"review_id": "r1", "rating": 5},
-        {"review_id": "r1", "rating": 1},
-        {"review_id": "r2", "rating": 4},
+        {
+            "review_id": "r1",
+            "rating": 5,
+            "snippet": "Excellent service.",
+        },
+        {
+            "review_id": "r1",
+            "rating": 1,
+            "snippet": "Poor service.",
+        },
+        {
+            "review_id": "r2",
+            "rating": 4,
+            "snippet": "Good experience.",
+        },
     ]
 
     results = normalize_reviews(raw_reviews, "place-123")
@@ -141,15 +154,29 @@ def test_normalize_review_handles_malformed_optional_fields():
     assert result["rating"] == 3.0
 
 
-def test_normalize_reviews_rejects_invalid_item():
-    """An invalid review inside a batch raises a clear error."""
+def test_normalize_reviews_skips_invalid_item():
+    """Skip an invalid review while retaining valid reviews."""
     raw_reviews = [
-        {"review_id": "r1", "rating": 5},
-        {"review_id": "r2", "rating": "not a rating"},
+        {
+            "review_id": "r1",
+            "rating": 5,
+            "snippet": "Excellent service.",
+        },
+        {
+            "review_id": "r2",
+            "rating": "not a rating",
+            "snippet": "Poor service.",
+        },
     ]
 
-    with pytest.raises(ReviewNormalizationError):
-        normalize_reviews(raw_reviews, "place-123")
+    results, skipped = normalize_reviews_with_skips(
+        raw_reviews,
+        "place-123",
+    )
+
+    assert len(results) == 1
+    assert results[0]["review_id"] == "r1"
+    assert skipped == 1
 
 
 def test_normalize_review_trims_whitespace():
@@ -191,8 +218,16 @@ def test_normalize_review_converts_blank_fields_to_none():
 def test_normalize_reviews_deduplicates_ids_with_whitespace():
     """Review IDs are cleaned before duplicate detection."""
     raw_reviews = [
-        {"review_id": "r1", "rating": 5},
-        {"review_id": "  r1  ", "rating": 2},
+        {
+            "review_id": "r1",
+            "rating": 5,
+            "snippet": "Excellent service.",
+        },
+        {
+            "review_id": "  r1  ",
+            "rating": 2,
+            "snippet": "Disappointing experience.",
+        },
     ]
 
     results = normalize_reviews(raw_reviews, "place-123")

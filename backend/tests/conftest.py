@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, delete
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
-from app.models import AnalysisTarget, User
+from app.models import AnalysisTarget, IngestionAttempt, Review, User
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -20,9 +20,10 @@ def alembic_config():
         if os.environ.get("CI"):
             pytest.fail("TEST_DATABASE_URL must be set in CI")
         pytest.skip("Set TEST_DATABASE_URL to run the MySQL tests")
-    # These tests wipe tables, so never let them point at a real database.
+
     if "test" not in (make_url(url).database or ""):
         pytest.fail("TEST_DATABASE_URL must name a database containing 'test'")
+
     config = Config(str(ALEMBIC_INI))
     config.attributes["database_url"] = url
     return config
@@ -40,6 +41,8 @@ def session_factory(alembic_config):
 @pytest.fixture
 def db(session_factory):
     with session_factory() as session:
+        session.execute(delete(IngestionAttempt))
+        session.execute(delete(Review))
         session.execute(delete(AnalysisTarget))
         session.execute(delete(User))
         session.commit()
