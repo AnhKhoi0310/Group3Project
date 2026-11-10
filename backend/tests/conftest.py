@@ -4,10 +4,13 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, delete
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
+from app.db import get_session
+from app.main import app
 from app.models import User
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
@@ -43,3 +46,14 @@ def db(session_factory):
         session.execute(delete(User))
         session.commit()
         yield session
+
+
+@pytest.fixture
+def client(db):
+    """Use the test database session for requests made by API tests."""
+    app.dependency_overrides[get_session] = lambda: db
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.clear()
