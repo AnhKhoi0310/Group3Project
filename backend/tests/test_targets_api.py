@@ -149,6 +149,17 @@ def test_unauthenticated_create_is_rejected_and_saves_nothing(client, db, header
             {"name": "Cafe", "source_url": "https://google.com.evil.example/maps/x"},
             "source_url",
         ),
+        (
+            {
+                "name": "Cafe",
+                "source_url": "https://www.google.com/maps/place/Example+Cafe",
+            },
+            "source_url",
+        ),
+        (
+            {"name": "Cafe", "source_url": "https://maps.app.goo.gl/abc123"},
+            "source_url",
+        ),
     ],
 )
 def test_invalid_input_is_rejected_with_a_field_error_and_not_saved(
@@ -162,6 +173,22 @@ def test_invalid_input_is_rejected_with_a_field_error_and_not_saved(
     assert field in body["fieldErrors"]
     assert "Traceback" not in response.text
     assert saved_targets(db) == []
+
+
+def test_place_id_url_is_accepted(client, db):
+    url = (
+        "https://www.google.com/maps/search/"
+        "?api=1&query=Cafe&query_place_id=ChIJExample1"
+    )
+
+    response = client.post(
+        "/api/targets",
+        json={"name": "Cafe", "source_url": url},
+        headers=bearer("token-a"),
+    )
+
+    assert response.status_code == 201
+    assert len(saved_targets(db)) == 1
 
 
 def test_database_failure_returns_a_safe_error_and_saves_nothing(

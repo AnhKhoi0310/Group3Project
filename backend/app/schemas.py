@@ -3,6 +3,12 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.adapters.review_source import (
+    ReviewSourceError,
+    extract_data_id,
+    extract_place_id,
+)
+
 MAX_NAME_LENGTH = 255
 MAX_URL_LENGTH = 2048
 GOOGLE_HOSTS = {"google.com", "www.google.com", "maps.google.com"}
@@ -16,6 +22,22 @@ URL_WRONG_SITE = (
     "This link isn't from Google Maps. "
     "Paste a Google Maps URL for the place you want to analyze."
 )
+URL_NO_PLACE = (
+    "We couldn't find a specific place in that link. Open the business on "
+    "Google Maps and copy the full address from your browser's address bar. "
+    "Shortened links aren't supported."
+)
+
+
+def _identifies_a_place(url: str) -> bool:
+    """True if the ingestion adapter could find a place or data ID in the URL."""
+    for extract in (extract_place_id, extract_data_id):
+        try:
+            extract(url)
+            return True
+        except ReviewSourceError:
+            continue
+    return False
 
 
 class TargetCreate(BaseModel):
@@ -51,10 +73,10 @@ class TargetCreate(BaseModel):
             raise ValueError(URL_MALFORMED) from None
         if parsed.scheme != "https" or not host:
             raise ValueError(URL_MALFORMED)
-        if host not in GOOGLE_HOSTS or (
-            host != "maps.google.com" and not parsed.path.startswith("/maps")
-        ):
+        if host not in GOOGLE_HOSTS or not parsed.path.startswith("/maps"):
             raise ValueError(URL_WRONG_SITE)
+        if not _identifies_a_place(value):
+            raise ValueError(URL_NO_PLACE)
         return value
 
 
