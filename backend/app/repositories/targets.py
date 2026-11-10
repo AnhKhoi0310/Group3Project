@@ -29,3 +29,13 @@ def get_target_for_owner(
         AnalysisTarget.owner_id == owner_id,
     )
     return session.scalars(query).one_or_none()
+
+
+def list_targets_for_owner(session: Session, owner_id: int) -> list[AnalysisTarget]:
+    """Return only this owner's targets, newest first."""
+    query = (
+        select(AnalysisTarget)
+        .where(AnalysisTarget.owner_id == owner_id)
+        .order_by(AnalysisTarget.created_at.desc(), AnalysisTarget.id.desc())
+    )
+    return list(session.scalars(query).all())

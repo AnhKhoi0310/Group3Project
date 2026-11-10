@@ -1,4 +1,4 @@
-"""POST /api/targets against real MySQL. Needs TEST_DATABASE_URL."""
+"""/api/targets against real MySQL. Needs TEST_DATABASE_URL."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -54,6 +54,19 @@ def saved_targets(db):
 def user_id(db, uid):
     db.rollback()
     return db.scalar(select(User.id).where(User.firebase_uid == uid))
+
+
+def make_target(client, token, name):
+    response = client.post(
+        "/api/targets",
+        json={"name": name, "source_url": GOOD_URL},
+        headers=bearer(token),
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+# --- Create (S1-015) ---
 
 
 def test_create_target_is_owned_by_the_authenticated_user(client, db):
@@ -210,3 +223,88 @@ def test_database_failure_returns_a_safe_error_and_saves_nothing(
     assert "secret-sql" not in response.text
     assert "db host down" not in response.text
     assert saved_targets(db) == []
+
+
+# --- List (S1-017) ---
+
+
+def test_each_user_sees_only_their_own_targets(client, db):
+    a = make_target(client, "token-a", "A cafe")
+    b = make_target(client, "token-b", "B cafe")
+
+    response_a = client.get("/api/targets", headers=bearer("token-a"))
+    response_b = client.get("/api/targets", headers=bearer("token-b"))
+
+    assert response_a.status_code == 200
+    assert [t["id"] for t in response_a.json()] == [a["id"]]
+    assert response_b.status_code == 200
+    assert [t["id"] for t in response_b.json()] == [b["id"]]
+    assert "A cafe" not in response_b.text
+
+
+def test_list_is_empty_for_a_user_with_no_targets(client, db):
+    make_target(client, "token-a", "A cafe")
+
+    response = client.get("/api/targets", headers=bearer("token-b"))
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_returns_display_fields_and_hides_the_owner(client, db):
+    make_target(client, "token-a", "A cafe")
+
+    item = client.get("/api/targets", headers=bearer("token-a")).json()[0]
+
+    assert item["name"] == "A cafe"
+    assert item["platform"] == PLATFORM_GOOGLE_MAPS
+    assert item["source_url"] == GOOD_URL
+    assert "owner_id" not in item
+
+
+def test_list_is_newest_first(client, db):
+    make_target(client, "token-a", "First")
+    make_target(client, "token-a", "Second")
+
+    response = client.get("/api/targets", headers=bearer("token-a"))
+
+    assert [t["name"] for t in response.json()] == ["Second", "First"]
+
+
+@pytest.mark.parametrize(
+    "headers", [{}, bearer("forged-token"), {"Authorization": "Basic abc"}]
+)
+def test_unauthenticated_list_is_rejected_without_data(client, db, headers):
+    make_target(client, "token-a", "A cafe")
+
+    response = client.get("/api/targets", headers=headers)
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "unauthenticated"
+    assert "A cafe" not in response.text
+
+
+def test_list_ignores_client_supplied_owner(client, db):
+    a = make_target(client, "token-a", "A cafe")
+    make_target(client, "token-b", "B cafe")
+
+    response = client.get(
+        "/api/targets?owner_id=1&user_id=1",
+        headers={**bearer("token-b"), "X-Owner-Id": str(a["id"])},
+    )
+
+    assert [t["name"] for t in response.json()] == ["B cafe"]
+
+
+def test_list_database_failure_returns_a_safe_error(client, db, monkeypatch):
+    def fail(*args, **kwargs):
+        raise OperationalError("SELECT secret-sql", {}, Exception("db host down"))
+
+    monkeypatch.setattr(targets_router, "list_targets_for_owner", fail)
+
+    response = client.get("/api/targets", headers=bearer("token-a"))
+
+    assert response.status_code == 500
+    assert response.json()["code"] == "unexpected"
+    assert "secret-sql" not in response.text
+    assert "db host down" not in response.text
