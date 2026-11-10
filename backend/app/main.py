@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth import get_token_verifier
 from app.config import CorsSettings, get_settings
 from app.errors import ApiError, handle_api_error
-from app.routers import auth
+from app.routers import auth, targets
 
 
 @asynccontextmanager
@@ -27,7 +27,7 @@ app.add_middleware(
 )
 app.add_exception_handler(ApiError, handle_api_error)
 app.include_router(auth.router)
-
+app.include_router(targets.router)
 
 @app.get("/api/health")
 def health() -> dict[str, str]:

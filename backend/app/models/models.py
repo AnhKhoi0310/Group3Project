@@ -31,3 +31,9 @@ class AnalysisTarget(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False
     )
+    platform: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="google_maps"
+    )
+    source_url: Mapped[str | None] = mapped_column(
+        String(2048), nullable=True
+    )
