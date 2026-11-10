@@ -17,13 +17,21 @@ const UNEXPECTED = "Something went wrong on our side. Please try again.";
 
 function describeFailure(category: string | null | undefined): string {
   const messages: Record<string, string> = {
-    invalid_source: "The saved review link could not be used. Check the link and try again.",
-    provider_timeout: "The review source took too long to respond. Try again in a few minutes.",
-    provider_quota: "The review collection limit has been reached. Try again later.",
-    provider_unavailable: "The review source is unavailable. Try again in a few minutes.",
-    persistence_error: "Reviews were collected but could not be saved. Try again.",
+    invalid_source:
+      "The saved review link could not be used. Check the link and try again.",
+    provider_timeout:
+      "The review source took too long to respond. Try again in a few minutes.",
+    provider_quota:
+      "The review collection limit has been reached. Try again later.",
+    provider_unavailable:
+      "The review source is unavailable. Try again in a few minutes.",
+    persistence_error:
+      "Reviews were collected but could not be saved. Try again.",
   };
-  return messages[category ?? ""] ?? "The previous review collection attempt failed. Try again.";
+  return (
+    messages[category ?? ""] ??
+    "The previous review collection attempt failed. Try again."
+  );
 }
 
 function describeAttempt(attempt: IngestionAttempt): string {
@@ -50,6 +58,7 @@ export default function TargetWorkspacePage() {
 
   useEffect(() => {
     if (!targetId) return;
+    const id = targetId;
     let active = true;
     setTarget(null);
     setError("");
@@ -58,11 +67,11 @@ export default function TargetWorkspacePage() {
 
     async function load() {
       try {
-        const item = await getTarget(api, targetId);
+        const item = await getTarget(api, id);
         if (!active) return;
         setTarget(item);
 
-        const latest = await getLatestIngestion(api, targetId);
+        const latest = await getLatestIngestion(api, id);
         if (!active) return;
         setAttempt(latest);
         if (latest?.status === "failed") {
