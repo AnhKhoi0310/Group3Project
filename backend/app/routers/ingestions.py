@@ -18,6 +18,7 @@ from app.repositories.ingestions import (
     complete_attempt,
     create_attempt,
     fail_attempt,
+    get_latest_attempt_for_target,
 )
 from app.repositories.reviews import (
     create_review,
@@ -31,7 +32,6 @@ from app.services.ingestion import IngestionError, collect_reviews
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/targets")
-
 PROVIDER_MAX_REVIEWS = 50
 
 INGESTION_ERRORS: dict[str, tuple[int, str]] = {
@@ -52,6 +52,10 @@ INGESTION_ERRORS: dict[str, tuple[int, str]] = {
         502,
         "We couldn't reach the review source. Try again in a few minutes.",
     ),
+    "persistence_error": (
+        500,
+        "We collected reviews but couldn't save them. Please try again.",
+    ),
     "unexpected": (
         502,
         "We couldn't collect reviews this time. Please try again later.",
@@ -65,6 +69,9 @@ class IngestionRead(BaseModel):
     status: str
     reviews_found: int
     reviews_skipped: int
+    failure_category: str | None
+    started_at: datetime
+    completed_at: datetime | None
 
 
 class ReviewRead(BaseModel):
@@ -114,6 +121,19 @@ def _record_failure(
         )
 
 
+def _attempt_response(attempt: IngestionAttempt) -> IngestionRead:
+    return IngestionRead(
+        attempt_id=attempt.id,
+        target_id=attempt.target_id,
+        status=attempt.status,
+        reviews_found=attempt.reviews_found,
+        reviews_skipped=attempt.reviews_skipped,
+        failure_category=attempt.failure_category,
+        started_at=attempt.started_at,
+        completed_at=attempt.completed_at,
+    )
+
+
 @router.post("/{target_id}/ingestions", response_model=IngestionRead)
 def start_ingestion(
     target_id: int,
@@ -123,7 +143,7 @@ def start_ingestion(
 ) -> IngestionRead:
     """Collect, normalize, and persist reviews for an owned target."""
 
-    # Verify ownership before creating an attempt or contacting the provider.
+    # Ownership is checked before an attempt is created or the provider is called.
     try:
         target = get_target_for_owner(session, target_id, owner_id=user.id)
     except SQLAlchemyError:
@@ -137,7 +157,6 @@ def start_ingestion(
     if target is None:
         raise _target_not_found()
 
-    # Record the attempt before contacting the external provider.
     try:
         attempt = create_attempt(session, target.id)
     except SQLAlchemyError:
@@ -149,8 +168,8 @@ def start_ingestion(
             "Something went wrong on our side. Please try again.",
         ) from None
 
-    # Always use the source URL stored on the owned target.
     try:
+        # Never accept a URL or owner identifier from the request body.
         outcome = collect_reviews(target.source_url, fetch)
     except IngestionError as exc:
         logger.warning(
@@ -159,51 +178,42 @@ def start_ingestion(
             exc.category,
             exc_info=True,
         )
-
         _record_failure(session, attempt, exc.category)
-
         status_code, message = INGESTION_ERRORS.get(
             exc.category,
             INGESTION_ERRORS["unexpected"],
         )
-
         raise ApiError(
             status_code,
             f"ingestion_{exc.category}",
             message,
         ) from None
 
-    # Save reviews and mark the attempt successful.
     try:
+        # save_reviews adds rows but does not commit. complete_attempt commits
+        # review rows and the succeeded attempt in one database transaction.
         save_reviews(
             session,
             target_id=target.id,
             source_platform=target.platform,
             reviews=outcome.reviews,
         )
-
         completed = complete_attempt(
             session,
             attempt,
             reviews_found=outcome.reviews_found,
             reviews_skipped=outcome.reviews_skipped,
         )
-
     except SQLAlchemyError:
         session.rollback()
         logger.exception("Could not persist ingestion for target %s", target.id)
 
-        # Record the failed outcome after rolling back the review transaction.
+        # The attempt was committed before provider work, so it can be marked
+        # failed after rolling back the review transaction.
         try:
             failed_attempt = session.get(IngestionAttempt, attempt.id)
-
             if failed_attempt is not None:
-                fail_attempt(
-                    session,
-                    failed_attempt,
-                    "persistence_error",
-                )
-
+                fail_attempt(session, failed_attempt, "persistence_error")
         except SQLAlchemyError:
             session.rollback()
             logger.exception(
@@ -214,16 +224,43 @@ def start_ingestion(
         raise ApiError(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "ingestion_persistence_error",
-            "We collected the reviews but couldn't save them. Please try again.",
+            INGESTION_ERRORS["persistence_error"][1],
         ) from None
 
-    return IngestionRead(
-        attempt_id=completed.id,
-        target_id=target.id,
-        status=completed.status,
-        reviews_found=completed.reviews_found,
-        reviews_skipped=completed.reviews_skipped,
-    )
+    return _attempt_response(completed)
+
+
+@router.get(
+    "/{target_id}/ingestions/latest",
+    response_model=IngestionRead | None,
+)
+def get_latest_ingestion(
+    target_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_session)],
+) -> IngestionRead | None:
+    """Return the latest persisted attempt after verifying target ownership."""
+
+    try:
+        target = get_target_for_owner(session, target_id, owner_id=user.id)
+        if target is None:
+            raise _target_not_found()
+
+        attempt = get_latest_attempt_for_target(session, target.id)
+        return _attempt_response(attempt) if attempt is not None else None
+    except ApiError:
+        raise
+    except SQLAlchemyError:
+        logger.exception(
+            "Could not load latest ingestion for target %s and user %s",
+            target_id,
+            user.id,
+        )
+        raise ApiError(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "unexpected",
+            "Something went wrong on our side. Please try again.",
+        ) from None
 
 
 @router.post(
@@ -240,17 +277,10 @@ def create_target_review(
     """Create a review only when the authenticated user owns its parent target."""
 
     try:
-        # Check parent ownership before performing any child-resource operation.
-        target = get_target_for_owner(
-            session,
-            target_id,
-            owner_id=user.id,
-        )
-
+        target = get_target_for_owner(session, target_id, owner_id=user.id)
         if target is None:
             raise _target_not_found()
 
-        # The client cannot choose the target ID or source platform.
         review = create_review(
             session,
             target_id=target.id,
@@ -258,12 +288,9 @@ def create_target_review(
             text=payload.text,
             rating=payload.rating,
         )
-
         return review
-
     except ApiError:
         raise
-
     except SQLAlchemyError:
         session.rollback()
         logger.exception(
@@ -271,7 +298,6 @@ def create_target_review(
             target_id,
             user.id,
         )
-
         raise ApiError(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "unexpected",
@@ -284,27 +310,18 @@ def get_target_reviews(
     target_id: int,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
-) -> list:
+) -> list[ReviewRead]:
     """Return reviews only after verifying ownership of their parent target."""
 
     try:
-        target = get_target_for_owner(
-            session,
-            target_id,
-            owner_id=user.id,
-        )
-
+        target = get_target_for_owner(session, target_id, owner_id=user.id)
         if target is None:
             raise _target_not_found()
-
         return list_reviews_for_target(session, target.id)
-
     except ApiError:
         raise
-
     except SQLAlchemyError:
         logger.exception("Could not load reviews for target %s", target_id)
-
         raise ApiError(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "unexpected",

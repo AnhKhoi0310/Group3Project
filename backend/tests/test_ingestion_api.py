@@ -100,13 +100,16 @@ def test_owner_can_start_ingestion_from_the_stored_source_url(client, fetcher):
     response = ingest(client, target["id"])
 
     assert response.status_code == 200
-    assert response.json() == {
-        "attempt_id": 1,
-        "target_id": target["id"],
-        "status": "succeeded",
-        "reviews_found": 1,
-        "reviews_skipped": 0,
-    }
+    body = response.json()
+    assert body["attempt_id"] == 1
+    assert body["target_id"] == target["id"]
+    assert body["status"] == "succeeded"
+    assert body["reviews_found"] == 1
+    assert body["reviews_skipped"] == 0
+    assert body["started_at"] is not None
+    assert body["completed_at"] is not None
+    assert body["failure_category"] is None
+
     assert fetcher.calls == [GOOD_URL]
 
 

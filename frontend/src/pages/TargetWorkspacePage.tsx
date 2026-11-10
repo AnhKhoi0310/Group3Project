@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
-import { startIngestion, type IngestionResult } from "../api/ingestions";
+import {
+  getLatestIngestion,
+  startIngestion,
+  type IngestionAttempt,
+} from "../api/ingestions";
 import { getTarget, type AnalysisTarget } from "../api/targets";
 import { useAuth } from "../auth/AuthContext";
 import Button from "../components/Button";
@@ -11,13 +15,24 @@ import LoadingIndicator from "../components/LoadingIndicator";
 const PLATFORM_LABELS: Record<string, string> = { google_maps: "Google Maps" };
 const UNEXPECTED = "Something went wrong on our side. Please try again.";
 
-function describeResult(result: IngestionResult): string {
-  const found = `Found ${result.reviews_found} ${
-    result.reviews_found === 1 ? "review" : "reviews"
-  } for this target.`;
-  if (result.reviews_skipped === 0) return found;
-  return `${found} ${result.reviews_skipped} ${
-    result.reviews_skipped === 1 ? "was" : "were"
+function describeFailure(category: string | null | undefined): string {
+  const messages: Record<string, string> = {
+    invalid_source: "The saved review link could not be used. Check the link and try again.",
+    provider_timeout: "The review source took too long to respond. Try again in a few minutes.",
+    provider_quota: "The review collection limit has been reached. Try again later.",
+    provider_unavailable: "The review source is unavailable. Try again in a few minutes.",
+    persistence_error: "Reviews were collected but could not be saved. Try again.",
+  };
+  return messages[category ?? ""] ?? "The previous review collection attempt failed. Try again.";
+}
+
+function describeAttempt(attempt: IngestionAttempt): string {
+  const found = `Found ${attempt.reviews_found} ${
+    attempt.reviews_found === 1 ? "review" : "reviews"
+  }.`;
+  if (attempt.reviews_skipped === 0) return found;
+  return `${found} ${attempt.reviews_skipped} ${
+    attempt.reviews_skipped === 1 ? "was" : "were"
   } skipped because they had no text or rating.`;
 }
 
@@ -30,7 +45,7 @@ export default function TargetWorkspacePage() {
   const [target, setTarget] = useState<AnalysisTarget | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<IngestionResult | null>(null);
+  const [attempt, setAttempt] = useState<IngestionAttempt | null>(null);
   const [ingestError, setIngestError] = useState("");
 
   useEffect(() => {
@@ -38,14 +53,28 @@ export default function TargetWorkspacePage() {
     let active = true;
     setTarget(null);
     setError("");
-    setResult(null);
+    setAttempt(null);
     setIngestError("");
-    getTarget(api, targetId)
-      .then((item) => active && setTarget(item))
-      .catch((caught) => {
+
+    async function load() {
+      try {
+        const item = await getTarget(api, targetId);
+        if (!active) return;
+        setTarget(item);
+
+        const latest = await getLatestIngestion(api, targetId);
+        if (!active) return;
+        setAttempt(latest);
+        if (latest?.status === "failed") {
+          setIngestError(describeFailure(latest.failure_category));
+        }
+      } catch (caught) {
         if (!active) return;
         setError(caught instanceof ApiError ? caught.message : UNEXPECTED);
-      });
+      }
+    }
+
+    void load();
     return () => {
       active = false;
     };
@@ -54,12 +83,20 @@ export default function TargetWorkspacePage() {
   async function collect() {
     if (!target) return;
     setBusy(true);
-    setResult(null);
     setIngestError("");
     try {
-      setResult(await startIngestion(api, target.id));
+      const latest = await startIngestion(api, target.id);
+      // Keep the page tolerant of older mocked API responses during migration.
+      setAttempt({ ...latest, status: latest.status ?? "succeeded" });
     } catch (caught) {
       setIngestError(caught instanceof ApiError ? caught.message : UNEXPECTED);
+      // The POST reports a friendly error; fetch the persisted attempt so the
+      // workspace still displays the backend's authoritative failed state.
+      try {
+        setAttempt(await getLatestIngestion(api, String(target.id)));
+      } catch {
+        // Keep the original user-facing ingestion error.
+      }
     } finally {
       setBusy(false);
     }
@@ -78,6 +115,14 @@ export default function TargetWorkspacePage() {
   }
 
   if (!target) return <LoadingIndicator />;
+
+  const statusLabel = busy
+    ? "Processing"
+    : attempt?.status === "succeeded"
+      ? "Reviews found"
+      : attempt?.status === "failed"
+        ? "Failed"
+        : "Not started";
 
   return (
     <div className="space-y-6">
@@ -113,7 +158,7 @@ export default function TargetWorkspacePage() {
         <p className="text-sm text-slate-600">
           Status:{" "}
           <span className="rounded-md border border-slate-300 bg-slate-100 px-2 py-0.5 font-medium">
-            {result ? "Reviews found" : "Not started"}
+            {statusLabel}
           </span>
         </p>
         <Button onClick={collect} disabled={busy}>
@@ -125,9 +170,14 @@ export default function TargetWorkspacePage() {
           </p>
         )}
         {ingestError && <ErrorMessage message={ingestError} />}
-        {result && (
+        {attempt?.status === "succeeded" && (
           <p role="status" className="text-sm text-slate-700">
-            {describeResult(result)}
+            {describeAttempt(attempt)}
+          </p>
+        )}
+        {attempt?.status === "failed" && (
+          <p className="text-sm text-slate-600">
+            The last attempt failed. Existing saved reviews have been retained.
           </p>
         )}
       </section>

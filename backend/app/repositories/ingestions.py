@@ -7,7 +7,7 @@ from app.models import IngestionAttempt
 
 
 def create_attempt(session: Session, target_id: int) -> IngestionAttempt:
-    """Create and persist a new ingestion attempt in processing state."""
+    """Persist a processing attempt before calling the external provider."""
     attempt = IngestionAttempt(
         target_id=target_id,
         status="processing",
@@ -20,11 +20,22 @@ def create_attempt(session: Session, target_id: int) -> IngestionAttempt:
     return attempt
 
 
-def get_attempt(session: Session, attempt_id: int) -> IngestionAttempt | None:
-    """Retrieve an ingestion attempt by its ID."""
-    return session.scalars(
-        select(IngestionAttempt).where(IngestionAttempt.id == attempt_id)
-    ).one_or_none()
+def get_latest_attempt_for_target(
+    session: Session,
+    target_id: int,
+) -> IngestionAttempt | None:
+    """Return the newest attempt for one target.
+
+    The caller must authorize ownership of the target before calling this
+    function. Ordering by id breaks ties when timestamps have equal precision.
+    """
+    statement = (
+        select(IngestionAttempt)
+        .where(IngestionAttempt.target_id == target_id)
+        .order_by(IngestionAttempt.started_at.desc(), IngestionAttempt.id.desc())
+        .limit(1)
+    )
+    return session.scalars(statement).one_or_none()
 
 
 def complete_attempt(
@@ -33,13 +44,15 @@ def complete_attempt(
     reviews_found: int,
     reviews_skipped: int,
 ) -> IngestionAttempt:
-    """Mark an ingestion attempt as successful and record its results."""
+    """Commit pending Review inserts and the successful attempt atomically."""
     attempt.status = "succeeded"
     attempt.reviews_found = reviews_found
     attempt.reviews_skipped = reviews_skipped
     attempt.failure_category = None
     attempt.completed_at = datetime.now(UTC)
 
+    # save_reviews() adds Review rows to this same session. This commit makes
+    # those rows and the succeeded attempt visible together.
     session.commit()
     session.refresh(attempt)
     return attempt
@@ -50,7 +63,7 @@ def fail_attempt(
     attempt: IngestionAttempt,
     failure_category: str,
 ) -> IngestionAttempt:
-    """Mark an ingestion attempt as failed and record its failure category."""
+    """Persist a failed attempt without changing previously saved reviews."""
     attempt.status = "failed"
     attempt.failure_category = failure_category
     attempt.completed_at = datetime.now(UTC)
