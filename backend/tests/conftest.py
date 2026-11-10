@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, delete
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
-from app.models import User
+from app.models import AnalysisTarget, User
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -40,6 +40,7 @@ def session_factory(alembic_config):
 @pytest.fixture
 def db(session_factory):
     with session_factory() as session:
+        session.execute(delete(AnalysisTarget))
         session.execute(delete(User))
         session.commit()
         yield session

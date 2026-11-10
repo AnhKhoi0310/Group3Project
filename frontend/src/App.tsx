@@ -2,6 +2,7 @@ import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import RequireAuth from "./auth/RequireAuth";
 import Button from "./components/Button";
+import CreateTargetPage from "./pages/CreateTargetPage";
 import LoginPage from "./pages/LoginPage";
 import TargetsPage from "./pages/TargetsPage";
 
@@ -21,6 +22,9 @@ export default function App() {
               <Link to="/targets" className="text-sm font-medium">
                 Targets
               </Link>
+              <Link to="/targets/new" className="text-sm font-medium">
+                New target
+              </Link>
               <span className="ml-auto text-sm text-slate-600">
                 {session.user.email}
               </span>
@@ -39,6 +43,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <TargetsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/targets/new"
+            element={
+              <RequireAuth>
+                <CreateTargetPage />
               </RequireAuth>
             }
           />

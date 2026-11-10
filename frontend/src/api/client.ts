@@ -3,6 +3,7 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    readonly fieldErrors: Record<string, string> = {},
   ) {
     super(message);
   }
@@ -40,6 +41,7 @@ export function createApiClient(
           response.status,
           body?.code ?? "unexpected",
           body?.message ?? UNEXPECTED_MESSAGE,
+          body?.fieldErrors ?? {},
         );
       }
 
