@@ -146,7 +146,7 @@ def start_ingestion(
 
     # Always use the source URL stored on the owned target.
     try:
-        outcome = collect_reviews(target.id, target.source_url, fetch)
+        outcome = collect_reviews(target.source_url, fetch)
     except IngestionError as exc:
         logger.warning(
             "Ingestion failed for target %s (%s)",

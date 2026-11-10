@@ -3,7 +3,10 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from app.adapters.review_source import ReviewSourceError
+from app.adapters.review_source import (
+    ReviewSourceError,
+    extract_business_identifier,
+)
 from app.services.normalizer import (
     ReviewNormalizationError,
     normalize_reviews_with_skips,
@@ -26,13 +29,18 @@ class IngestionError(Exception):
 
 
 def collect_reviews(
-    target_id: int,
     source_url: str,
     fetch: Callable[[str], list[dict]],
 ) -> IngestionOutcome:
-    """Fetch from the target's stored URL and return only usable reviews."""
+    """Fetch from the target's stored URL and return usable normalized reviews."""
     if not source_url or not source_url.strip():
         raise IngestionError("invalid_source")
+
+    # Extract the real Google Maps business identifier.
+    try:
+        business_id = extract_business_identifier(source_url)
+    except ReviewSourceError as exc:
+        raise IngestionError(exc.category) from exc
 
     try:
         raw_reviews = fetch(source_url)
@@ -44,7 +52,7 @@ def collect_reviews(
     try:
         reviews, skipped = normalize_reviews_with_skips(
             raw_reviews,
-            str(target_id),
+            business_id,
         )
     except ReviewNormalizationError as exc:
         raise IngestionError("unexpected") from exc
