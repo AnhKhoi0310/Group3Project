@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { AuthProvider } from "../auth/AuthContext";
 import { createFakeApi, createFakeAuth, USER_A } from "../test/fakeAuth";
@@ -7,12 +7,21 @@ import CreateTargetPage from "./CreateTargetPage";
 
 const URL = "https://www.google.com/maps/place/Example+Cafe/data=!1s0x1:0x2";
 
+function WorkspaceStub() {
+  const location = useLocation();
+  const created = (location.state as { created?: boolean } | null)?.created;
+  return <p>Workspace opened{created ? " (created)" : ""}</p>;
+}
+
 function renderPage() {
   const api = createFakeApi();
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={["/targets/new"]}>
       <AuthProvider client={createFakeAuth(USER_A)} api={api}>
-        <CreateTargetPage />
+        <Routes>
+          <Route path="/targets/new" element={<CreateTargetPage />} />
+          <Route path="/targets/:targetId" element={<WorkspaceStub />} />
+        </Routes>
       </AuthProvider>
     </MemoryRouter>,
   );
@@ -28,7 +37,7 @@ function submit() {
 }
 
 describe("CreateTargetPage", () => {
-  it("sends trimmed input and confirms the new target", async () => {
+  it("sends trimmed input and opens the new target's workspace", async () => {
     const api = renderPage();
     api.request.mockResolvedValue({
       id: 1,
@@ -42,9 +51,7 @@ describe("CreateTargetPage", () => {
     fill("Google Maps link", ` ${URL} `);
     submit();
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "Example Cafe on Google Maps is saved",
-    );
+    expect(await screen.findByText("Workspace opened (created)")).toBeVisible();
     expect(api.request).toHaveBeenCalledWith(
       "/api/targets",
       expect.objectContaining({
@@ -74,7 +81,7 @@ describe("CreateTargetPage", () => {
       "aria-invalid",
       "true",
     );
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Workspace opened/)).not.toBeInTheDocument();
   });
 
   it("shows a friendly message for server failures, never raw text", async () => {

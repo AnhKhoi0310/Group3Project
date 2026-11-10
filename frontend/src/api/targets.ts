@@ -27,3 +27,12 @@ export function createTarget(
 export function listTargets(api: ApiClient): Promise<AnalysisTarget[]> {
   return api.request<AnalysisTarget[]>("/api/targets");
 }
+
+export function getTarget(
+  api: ApiClient,
+  targetId: string,
+): Promise<AnalysisTarget> {
+  return api.request<AnalysisTarget>(
+    `/api/targets/${encodeURIComponent(targetId)}`,
+  );
+}
