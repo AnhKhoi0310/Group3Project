@@ -39,12 +39,23 @@ describe("protected routes", () => {
     expect(screen.queryByText("Log in")).not.toBeInTheDocument();
   });
 
-  it("shows a signed-in user the page and their backend-verified identity", async () => {
-    const { api } = renderApp(USER_A);
+  it("shows a signed-in user their targets from the backend", async () => {
+    const api = createFakeApi();
+    api.request.mockResolvedValue([
+      {
+        id: 1,
+        name: "Example Cafe",
+        platform: "google_maps",
+        source_url: "https://www.google.com/maps/place/x",
+        created_at: "2026-11-10T00:00:00",
+      },
+    ]);
+
+    renderApp(USER_A, "/targets", api);
 
     expect(screen.getByText("Your targets")).toBeInTheDocument();
-    expect(await screen.findByText(/Verified as a@example.com/)).toBeVisible();
-    expect(api.request).toHaveBeenCalledWith("/api/me");
+    expect(await screen.findByText("Example Cafe")).toBeVisible();
+    expect(api.request).toHaveBeenCalledWith("/api/targets");
   });
 
   it("shows the backend's friendly message when the API rejects the session", async () => {
@@ -58,13 +69,14 @@ describe("protected routes", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Please log in to continue.",
     );
-    expect(screen.queryByText(/Verified as/)).not.toBeInTheDocument();
   });
 
   it("sends an already signed-in user away from login", async () => {
     renderApp(USER_A, "/login");
 
-    expect(await screen.findByText(/Verified as/)).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Your targets" }),
+    ).toBeVisible();
   });
 
   it("sends unknown paths through the guard", () => {

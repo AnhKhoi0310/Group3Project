@@ -23,3 +23,7 @@ export function createTarget(
     body: JSON.stringify(input),
   });
 }
+
+export function listTargets(api: ApiClient): Promise<AnalysisTarget[]> {
+  return api.request<AnalysisTarget[]>("/api/targets");
+}

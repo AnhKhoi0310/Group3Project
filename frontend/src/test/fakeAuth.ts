@@ -24,8 +24,9 @@ export function createFakeAuth(initial: AuthUser | null | undefined) {
   return client;
 }
 
+/** By default every request returns an empty list (no targets). */
 export function createFakeApi() {
   return {
-    request: vi.fn(async () => ({ uid: "uid-a", email: "a@example.com" })),
+    request: vi.fn(async () => []),
   } as unknown as ApiClient & { request: ReturnType<typeof vi.fn> };
 }
