@@ -8,6 +8,7 @@ import app.main as main_module
 from app.adapters.identity import InvalidTokenError, VerifiedIdentity
 from app.adapters.review_source import ReviewSourceError
 from app.auth import get_token_verifier
+from app.config import load_settings
 from app.db import get_session
 from app.main import app
 from app.models import IngestionAttempt, Review
@@ -58,6 +59,19 @@ def client(session_factory, fetcher, monkeypatch):
 
     fake_verifier = FakeVerifier()
 
+    # The app lifespan calls get_settings() directly during startup.
+    # Mock settings so CI does not require real environment secrets.
+    monkeypatch.setattr(
+        main_module,
+        "get_settings",
+        lambda: load_settings(
+            database_url="sqlite:///unused.db",
+            firebase_project_id="test-project",
+            firebase_credentials_path="unused.json",
+            review_provider_api_key="test-api-key",
+        ),
+    )
+
     # The app lifespan calls get_token_verifier() directly during startup.
     # A FastAPI dependency override does not intercept that direct call.
     monkeypatch.setattr(
@@ -65,6 +79,8 @@ def client(session_factory, fetcher, monkeypatch):
         "get_token_verifier",
         lambda: fake_verifier,
     )
+
+    previous_overrides = app.dependency_overrides.copy()
 
     app.dependency_overrides[get_token_verifier] = lambda: fake_verifier
     app.dependency_overrides[get_session] = session_override
@@ -75,6 +91,7 @@ def client(session_factory, fetcher, monkeypatch):
             yield test_client
     finally:
         app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous_overrides)
 
 
 @pytest.fixture(autouse=True)
@@ -149,8 +166,10 @@ def test_s1_022_ingestion_persists_normalized_reviews_for_the_correct_target(
 
         assert len(target_a_reviews) == 2
         assert target_b_reviews == []
+
         by_source_id = {review.source_review_id: review for review in target_a_reviews}
         first = by_source_id["source-review-1"]
+
         assert first.text == "Excellent service."
         assert first.rating == 5
         assert first.reviewer_name == "Reviewer One"
@@ -173,12 +192,19 @@ def test_s1_022_reingestion_does_not_duplicate_source_review_ids(
     client, fetcher, session_factory
 ):
     target = create_target(client)
-    fetcher.reviews = [{"review_id": "same-id", "rating": 5, "snippet": "Real review."}]
+    fetcher.reviews = [
+        {
+            "review_id": "same-id",
+            "rating": 5,
+            "snippet": "Real review.",
+        }
+    ]
 
     first = start(client, target["id"])
     second = start(client, target["id"])
 
     assert first.status_code == second.status_code == 200
+
     with session_factory() as session:
         saved = session.scalars(
             select(Review).where(Review.target_id == target["id"])
@@ -191,11 +217,16 @@ def test_s1_023_successful_attempt_is_persisted_and_readable_after_reload(
 ):
     target = create_target(client)
     fetcher.reviews = [
-        {"review_id": "success-1", "rating": 5, "snippet": "A genuine review."}
+        {
+            "review_id": "success-1",
+            "rating": 5,
+            "snippet": "A genuine review.",
+        }
     ]
 
     started = start(client, target["id"])
     assert started.status_code == 200
+
     body = started.json()
     assert body["status"] == "succeeded"
     assert body["completed_at"] is not None
@@ -210,6 +241,7 @@ def test_s1_023_successful_attempt_is_persisted_and_readable_after_reload(
         attempts = session.scalars(
             select(IngestionAttempt).where(IngestionAttempt.target_id == target["id"])
         ).all()
+
         assert len(attempts) == 1
         assert attempts[0].status == "succeeded"
 
@@ -219,8 +251,13 @@ def test_s1_023_provider_failure_is_recorded_and_existing_reviews_are_retained(
 ):
     target = create_target(client)
     fetcher.reviews = [
-        {"review_id": "kept-review", "rating": 4, "snippet": "Keep this review."}
+        {
+            "review_id": "kept-review",
+            "rating": 4,
+            "snippet": "Keep this review.",
+        }
     ]
+
     first = start(client, target["id"])
     assert first.status_code == 200
 
@@ -228,6 +265,7 @@ def test_s1_023_provider_failure_is_recorded_and_existing_reviews_are_retained(
         "provider_unavailable",
         "private provider diagnostics",
     )
+
     failed = start(client, target["id"])
     assert failed.status_code == 502
     assert "private provider diagnostics" not in failed.text
@@ -241,22 +279,32 @@ def test_s1_023_provider_failure_is_recorded_and_existing_reviews_are_retained(
         reviews = session.scalars(
             select(Review).where(Review.target_id == target["id"])
         ).all()
+
         attempts = session.scalars(
             select(IngestionAttempt)
             .where(IngestionAttempt.target_id == target["id"])
             .order_by(IngestionAttempt.id)
         ).all()
+
         assert len(reviews) == 1
         assert reviews[0].source_review_id == "kept-review"
-        assert [attempt.status for attempt in attempts] == ["succeeded", "failed"]
+        assert [attempt.status for attempt in attempts] == [
+            "succeeded",
+            "failed",
+        ]
         assert attempts[-1].failure_category == "provider_unavailable"
 
 
 def test_s1_023_foreign_user_cannot_read_ingestion_history(client, fetcher):
     target = create_target(client)
     fetcher.reviews = [
-        {"review_id": "private", "rating": 5, "snippet": "Private review."}
+        {
+            "review_id": "private",
+            "rating": 5,
+            "snippet": "Private review.",
+        }
     ]
+
     assert start(client, target["id"]).status_code == 200
 
     foreign = latest(client, target["id"], token="token-b")
