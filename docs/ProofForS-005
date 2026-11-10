@@ -1,0 +1,97 @@
+## S1-005 follow-up: credentials documentation + fresh-clone verification
+
+Replaces the "Team: fill this in" placeholder in `docs/project-setup.md` with real
+credential-sharing instructions (Firebase project `reviewlens-22f3e`, per-teammate Admin
+keys, SerpApi key via private DM from Diego).
+
+## Test Evidence
+
+Docs-only change, so no new automated tests. The section 7 checklist was run on a fresh
+clone of `main` in a GitHub Codespace (Linux, Docker 29.9, Node 24.22). The default Python
+was 3.14, so the app ran in the project's `python:3.12-slim` image and the backend checks
+used Python 3.12.3 via `uv`.
+Verified by: <name>, <date>. A dummy `REVIEW_PROVIDER_API_KEY` was used because no
+ingestion code calls SerpApi yet.
+
+| Section 7 item | Result | Evidence |
+|---|---|---|
+| Fresh clone, three `.env` files created | Pass | `cp` of the three `.env.example` files |
+| Backend stops with a clear message when Admin key is missing | Pass | First run, see below |
+| Admin key generated per the doc and placed | Pass | `ls backend/secrets` shows `firebase-admin.json` |
+| `docker compose up --build` succeeds | Pass | `Application startup complete.`, Vite `ready`, MySQL `Healthy` |
+| `/api/health` returns ok | Pass | `{"status":"ok"}` |
+| Migrations applied on a fresh database | Pass | `SHOW TABLES`, see below |
+| Missing required variable stops backend and names it | Pass | See below |
+| `git ls-files` shows no secrets | Pass | See below |
+| `ruff check`, `ruff format --check`, build, `pytest` | Pass | See below |
+| `npm run lint`, `format:check`, `build`, `npm test` | Pass | See below |
+| Frontend loads at forwarded port 5173 | [ ] pending | Vite reported `ready`; page load not yet confirmed |
+| Non-Docker path starts backend and frontend | [ ] not run | Docker path verified; non-Docker not tested |
+| Test credentials removed after the check | [ ] pending | Admin key deleted in Firebase console, Codespace deleted |
+
+### Missing Admin key (first run, before the key was added)
+```
+backend-1 | app.config.ConfigurationError: ReviewLens cannot start: FIREBASE_CREDENTIALS_PATH does not point to a valid Firebase service account key file.
+backend-1 | ERROR:    Application startup failed. Exiting.
+```
+
+### Migrations ran
+```
+$ docker compose exec db sh -c 'mysql -u reviewlens -p"$MYSQL_PASSWORD" reviewlens -e "SHOW TABLES;"'
++----------------------+
+| Tables_in_reviewlens |
++----------------------+
+| alembic_version      |
+| analysis_targets     |
+| users                |
++----------------------+
+```
+
+### Missing variable is named, with no secret values
+```
+$ docker compose exec backend sh -c 'REVIEW_PROVIDER_API_KEY= python -m app.config'
+ReviewLens cannot start: missing or invalid configuration: REVIEW_PROVIDER_API_KEY. Set these in backend/.env (see backend/.env.example) or as environment variables.
+```
+
+### No secrets tracked
+```
+$ git ls-files | grep -iE "\.env|secrets|firebase"
+.env.example
+backend/.env.example
+frontend/.env.example
+```
+`git status --short` showed no `.env` or `secrets/` entries. One stray scratch file from
+the session was deleted.
+
+### Backend checks (Python 3.12.3)
+```
+$ ruff check .                  All checks passed!
+$ ruff format --check .         29 files already formatted
+$ python -m compileall -q app   (no output)
+$ pytest                        122 passed, 9 skipped, 1 warning
+```
+The 9 skipped are the MySQL tests (`test_user_mapping.py`), skipped without
+`TEST_DATABASE_URL`. CI always runs them.
+
+### Frontend checks (Node 24.22)
+```
+$ npm ci                 added 367 packages
+$ npm run lint           (no output, exit 0)
+$ npm run format:check   All matched files use Prettier code style!
+$ npm run build          tsc --noEmit + vite build: built in 2.91s
+$ npm test               Test Files 5 passed (5); Tests 30 passed (30)
+```
+
+## Findings for the docs
+1. Docs say "Python 3.12" but not what to do when the system Python differs (Codespace
+   default was 3.14). Suggested README line: "If your system Python isn't 3.12, use Docker
+   or `uv venv --python 3.12`."
+2. Alembic prints nothing on startup (no logging config in `alembic.ini`), so a successful
+   migration is silent. Verify with `SHOW TABLES`.
+3. `docker compose up` creates `frontend/node_modules` owned by root (bind mount), so a
+   later host-side `npm ci` fails with EACCES. Fix: `sudo rm -rf frontend/node_modules`,
+   or run host npm checks before starting Docker.
+4. `npm ci` reports 14 vulnerabilities (8 moderate, 4 high, 2 critical) and a deprecated
+   ESLint 9.39.5. Not part of S1-005; worth a separate dependency-update ticket.
+5. The Codespaces URL isn't an authorized Firebase domain and CORS allows only
+   `localhost:5173`, so sign-in can't be tested there.
