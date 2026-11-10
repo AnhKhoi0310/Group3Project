@@ -86,10 +86,23 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # MySQL will not drop an index while a foreign key depends on it.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    for foreign_key in inspector.get_foreign_keys("ingestion_attempts"):
+        if foreign_key["constrained_columns"] == ["target_id"]:
+            op.drop_constraint(
+                foreign_key["name"],
+                "ingestion_attempts",
+                type_="foreignkey",
+            )
+
     op.drop_index(
         "ix_ingestion_attempts_target_id",
         table_name="ingestion_attempts",
     )
     op.drop_table("ingestion_attempts")
+
     op.drop_index("ix_reviews_target_id", table_name="reviews")
     op.drop_table("reviews")

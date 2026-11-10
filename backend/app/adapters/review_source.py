@@ -93,15 +93,27 @@ def extract_data_id(source_url: str) -> str:
     return match.group(1)
 
 
+def extract_business_identifier(source_url: str) -> str:
+    """Extract the Google Maps business identifier from a source URL."""
+    try:
+        return extract_place_id(source_url)
+    except ReviewSourceError as exc:
+        if exc.category != "invalid_source":
+            raise
+
+    return extract_data_id(source_url)
+
+
 def fetch_reviews(
     place_id: str,
     limit: int = 10,
     *,
     id_type: str = "place_id",
 ) -> list[dict]:
+    """Retrieve up to limit raw reviews, following SerpApi pages."""
     if id_type not in ("place_id", "data_id"):
         raise ValueError("Unsupported Google Maps identifier type.")
-    """Retrieve up to limit raw reviews, following SerpApi pages."""
+
     if not place_id or not place_id.strip():
         raise ValueError("A Google Maps place ID is required.")
 
@@ -141,17 +153,20 @@ def fetch_reviews(
                     "provider_quota",
                     "Review provider request limit reached.",
                 )
+
             if response.status_code in (400, 404):
                 raise ReviewSourceError(
                     "invalid_source",
                     "Invalid review source or request.",
                 )
+
             if response.status_code in (401, 403) or response.status_code >= 500:
                 raise ReviewSourceError(
                     "provider_unavailable",
                     "Unable to retrieve customer reviews.",
                     status_code=response.status_code,
                 )
+
             if response.status_code >= 400:
                 raise ReviewSourceError(
                     "unexpected",
@@ -179,6 +194,7 @@ def fetch_reviews(
                 )
 
             reviews = data.get("reviews", [])
+
             if not isinstance(reviews, list):
                 raise ReviewSourceError(
                     "unexpected",
@@ -188,6 +204,7 @@ def fetch_reviews(
             all_reviews.extend(reviews[: limit - len(all_reviews)])
 
             pagination = data.get("serpapi_pagination") or {}
+
             if not isinstance(pagination, dict):
                 raise ReviewSourceError(
                     "unexpected",
