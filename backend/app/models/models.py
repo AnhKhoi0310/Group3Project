@@ -5,6 +5,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
 
+PLATFORM_GOOGLE_MAPS = "google_maps"
+
 
 class User(Base):
     __tablename__ = "users"
@@ -28,6 +30,11 @@ class AnalysisTarget(Base):
         BigInteger, ForeignKey("users.id"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    platform: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
