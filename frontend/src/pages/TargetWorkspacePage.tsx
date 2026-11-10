@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
+import { startIngestion, type IngestionResult } from "../api/ingestions";
 import { getTarget, type AnalysisTarget } from "../api/targets";
 import { useAuth } from "../auth/AuthContext";
 import Button from "../components/Button";
@@ -10,6 +11,16 @@ import LoadingIndicator from "../components/LoadingIndicator";
 const PLATFORM_LABELS: Record<string, string> = { google_maps: "Google Maps" };
 const UNEXPECTED = "Something went wrong on our side. Please try again.";
 
+function describeResult(result: IngestionResult): string {
+  const found = `Found ${result.reviews_found} ${
+    result.reviews_found === 1 ? "review" : "reviews"
+  } for this target.`;
+  if (result.reviews_skipped === 0) return found;
+  return `${found} ${result.reviews_skipped} ${
+    result.reviews_skipped === 1 ? "was" : "were"
+  } skipped because they had no text or rating.`;
+}
+
 export default function TargetWorkspacePage() {
   const { api } = useAuth();
   const { targetId } = useParams();
@@ -18,12 +29,17 @@ export default function TargetWorkspacePage() {
     (location.state as { created?: boolean } | null)?.created === true;
   const [target, setTarget] = useState<AnalysisTarget | null>(null);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<IngestionResult | null>(null);
+  const [ingestError, setIngestError] = useState("");
 
   useEffect(() => {
     if (!targetId) return;
     let active = true;
     setTarget(null);
     setError("");
+    setResult(null);
+    setIngestError("");
     getTarget(api, targetId)
       .then((item) => active && setTarget(item))
       .catch((caught) => {
@@ -34,6 +50,20 @@ export default function TargetWorkspacePage() {
       active = false;
     };
   }, [api, targetId]);
+
+  async function collect() {
+    if (!target) return;
+    setBusy(true);
+    setResult(null);
+    setIngestError("");
+    try {
+      setResult(await startIngestion(api, target.id));
+    } catch (caught) {
+      setIngestError(caught instanceof ApiError ? caught.message : UNEXPECTED);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (error) {
     return (
@@ -83,13 +113,23 @@ export default function TargetWorkspacePage() {
         <p className="text-sm text-slate-600">
           Status:{" "}
           <span className="rounded-md border border-slate-300 bg-slate-100 px-2 py-0.5 font-medium">
-            Not started
+            {result ? "Reviews found" : "Not started"}
           </span>
         </p>
-        <Button disabled>Collect reviews</Button>
-        <p className="text-sm text-slate-600">
-          Collecting reviews isn&apos;t available yet.
-        </p>
+        <Button onClick={collect} disabled={busy}>
+          {busy ? "Collecting reviews…" : "Collect reviews"}
+        </Button>
+        {busy && (
+          <p className="text-sm text-slate-600">
+            Collecting reviews from the source. This can take a moment.
+          </p>
+        )}
+        {ingestError && <ErrorMessage message={ingestError} />}
+        {result && (
+          <p role="status" className="text-sm text-slate-700">
+            {describeResult(result)}
+          </p>
+        )}
       </section>
     </div>
   );

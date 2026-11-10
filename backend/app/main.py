@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth import get_token_verifier
 from app.config import CorsSettings, get_settings
 from app.errors import ApiError, handle_api_error, handle_validation_error
-from app.routers import auth, targets
+from app.routers import auth, ingestions, targets
 
 
 @asynccontextmanager
@@ -30,6 +30,7 @@ app.add_exception_handler(ApiError, handle_api_error)
 app.add_exception_handler(RequestValidationError, handle_validation_error)
 app.include_router(auth.router)
 app.include_router(targets.router)
+app.include_router(ingestions.router)
 
 
 @app.get("/api/health")
