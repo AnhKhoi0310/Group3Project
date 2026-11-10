@@ -79,7 +79,33 @@ Three templates are committed. Real values live only in untracked `.env` files.
 
 ### Getting the shared credentials
 
-> **Team: fill this in before sharing the repo.** Name who holds the Firebase Admin key, the Firebase web config, and the review-provider key, and how teammates receive them (for example a password manager or a private direct message). Never send them through git, pull requests, issues, public channels, or an AI tool.
+Firebase project: `reviewlens-22f3e`. Owner: Anh Khoi.
+
+| Credential | How to get it |
+|---|---|
+| Firebase access | Ask Anh Khoi to invite you to the Firebase project, then accept the invitation. |
+| Firebase Admin key | Generate your own. Each teammate has a personal key; never share or commit it. See the steps below. |
+| Firebase web config (`VITE_FIREBASE_*`) | Firebase console > Project settings > Your apps. Public by Firebase design. |
+| Review provider key (`REVIEW_PROVIDER_API_KEY`) | Ask Diego (GitHub `ds2723`, Discord Dolphint), who set up the SerpApi account, to send it by private Discord DM. Never via git, pull requests, issues, public channels, or an AI tool. The free-tier quota is shared, so avoid unnecessary live calls; tests use fixtures. |
+| MySQL passwords | Choose your own in the root `.env`. Not shared. |
+
+#### Generate your own Firebase Admin key
+
+1. Accept the invitation, then open the `reviewlens-22f3e` project in the Firebase console.
+2. Click the gear icon, then **Project settings**, then the **Service accounts** tab.
+3. Click **Generate new private key** and confirm. A `.json` file downloads.
+4. Create `backend/secrets/` if it doesn't exist.
+5. Move the file there and rename it exactly `firebase-admin.json`.
+6. Confirm `backend/.env` has:
+
+   ```
+   FIREBASE_PROJECT_ID=reviewlens-22f3e
+   FIREBASE_CREDENTIALS_PATH=secrets/firebase-admin.json
+   ```
+
+7. From `backend/`, run `python -m app.config`. It should print `Configuration OK.` Then start the backend, which confirms the key loads.
+
+If a key is leaked or committed, rotate it first (delete the key in the Firebase console and generate a new one), then remove it from the repo.
 
 ### Rules
 
