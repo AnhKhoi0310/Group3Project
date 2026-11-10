@@ -4,6 +4,28 @@ from sqlalchemy.orm import Session
 from app.models import Review
 
 
+def create_review(
+    session: Session,
+    target_id: int,
+    source_platform: str,
+    text: str,
+    rating: float,
+) -> Review:
+    """Create a review for a target that the caller has already authorized."""
+    review = Review(
+        target_id=target_id,
+        source_platform=source_platform,
+        text=text,
+        rating=rating,
+    )
+
+    session.add(review)
+    session.commit()
+    session.refresh(review)
+
+    return review
+
+
 def save_reviews(
     session: Session,
     target_id: int,

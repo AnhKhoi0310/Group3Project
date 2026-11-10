@@ -1,7 +1,8 @@
-"""POST /api/targets/{id}/ingestions against real MySQL. Needs TEST_DATABASE_URL."""
+"""Review and ingestion API tests against real MySQL. Needs TEST_DATABASE_URL."""
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
 
 from app.adapters.identity import InvalidTokenError, VerifiedIdentity
@@ -9,6 +10,7 @@ from app.adapters.review_source import ReviewSourceError
 from app.auth import get_token_verifier
 from app.db import get_session
 from app.main import app
+from app.models import IngestionAttempt, Review
 from app.routers import ingestions as ingestions_router
 from app.routers.ingestions import get_review_fetcher
 
@@ -83,6 +85,14 @@ def ingest(client, target_id, token="token-a", **kwargs):
     )
 
 
+def review_count(db):
+    return db.scalar(select(func.count()).select_from(Review))
+
+
+def ingestion_attempt_count(db):
+    return db.scalar(select(func.count()).select_from(IngestionAttempt))
+
+
 def test_owner_can_start_ingestion_from_the_stored_source_url(client, fetcher):
     target = make_target(client, "token-a", "A cafe")
     fetcher.result = [GOOD_REVIEW]
@@ -113,7 +123,7 @@ def test_client_supplied_source_and_owner_are_ignored(client, fetcher):
     assert fetcher.calls == [GOOD_URL]
 
 
-def test_another_users_target_is_denied_before_any_processing(client, fetcher):
+def test_another_users_target_is_denied_before_any_processing(client, fetcher, db):
     target = make_target(client, "token-a", "A cafe")
 
     response = ingest(client, target["id"], token="token-b")
@@ -123,6 +133,10 @@ def test_another_users_target_is_denied_before_any_processing(client, fetcher):
     assert "A cafe" not in response.text
     assert GOOD_URL not in response.text
     assert fetcher.calls == []
+
+    # Unauthorized ingestion must not create an attempt or a review.
+    assert ingestion_attempt_count(db) == 0
+    assert review_count(db) == 0
 
 
 def test_missing_and_foreign_targets_get_identical_responses(client, fetcher):
@@ -225,3 +239,187 @@ def test_database_failure_returns_a_safe_error_and_skips_the_provider(
     assert "secret-sql" not in response.text
     assert "db host down" not in response.text
     assert fetcher.calls == []
+
+
+def test_owner_can_create_and_retrieve_a_review(client, db):
+    target = make_target(client, "token-a", "A cafe")
+
+    create_response = client.post(
+        f"/api/targets/{target['id']}/reviews",
+        json={
+            "text": "Excellent coffee and friendly staff",
+            "rating": 4.5,
+        },
+        headers=bearer("token-a"),
+    )
+
+    assert create_response.status_code == 201
+
+    created = create_response.json()
+    assert created["target_id"] == target["id"]
+    assert created["source_platform"] == target["platform"]
+    assert created["text"] == "Excellent coffee and friendly staff"
+    assert created["rating"] == 4.5
+    assert created["source_review_id"] is None
+    assert created["reviewer_name"] is None
+    assert created["review_date"] is None
+
+    # The review must be persisted and associated with the correct target.
+    stored_reviews = db.scalars(
+        select(Review).where(Review.target_id == target["id"])
+    ).all()
+
+    assert len(stored_reviews) == 1
+    assert stored_reviews[0].text == "Excellent coffee and friendly staff"
+    assert stored_reviews[0].rating == 4.5
+    assert stored_reviews[0].source_platform == target["platform"]
+
+    get_response = client.get(
+        f"/api/targets/{target['id']}/reviews",
+        headers=bearer("token-a"),
+    )
+
+    assert get_response.status_code == 200
+    assert len(get_response.json()) == 1
+    assert get_response.json()[0]["id"] == created["id"]
+
+
+def test_client_cannot_choose_review_target_or_platform(client, db):
+    target_a = make_target(client, "token-a", "A cafe")
+    target_b = make_target(client, "token-a", "B cafe")
+
+    response = client.post(
+        f"/api/targets/{target_a['id']}/reviews",
+        json={
+            "text": "Review for target A",
+            "rating": 5,
+            "target_id": target_b["id"],
+            "source_platform": "attacker_platform",
+            "owner_id": 999,
+        },
+        headers=bearer("token-a"),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+
+    assert body["target_id"] == target_a["id"]
+    assert body["source_platform"] == target_a["platform"]
+    assert body["target_id"] != target_b["id"]
+    assert body["source_platform"] != "attacker_platform"
+
+    assert review_count(db) == 1
+
+
+def test_another_user_cannot_create_a_review_under_a_foreign_target(client, db):
+    target = make_target(client, "token-a", "A cafe")
+
+    response = client.post(
+        f"/api/targets/{target['id']}/reviews",
+        json={"text": "Forged review", "rating": 1},
+        headers=bearer("token-b"),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "target_not_found"
+
+    # No review or ingestion attempt may be created for the foreign target.
+    assert review_count(db) == 0
+    assert ingestion_attempt_count(db) == 0
+
+
+def test_foreign_and_missing_review_targets_get_identical_responses(client):
+    target = make_target(client, "token-a", "A cafe")
+
+    foreign = client.post(
+        f"/api/targets/{target['id']}/reviews",
+        json={"text": "Forged review", "rating": 1},
+        headers=bearer("token-b"),
+    )
+
+    missing = client.post(
+        "/api/targets/999999/reviews",
+        json={"text": "Forged review", "rating": 1},
+        headers=bearer("token-b"),
+    )
+
+    assert foreign.status_code == missing.status_code == 404
+    assert foreign.json() == missing.json()
+
+
+def test_another_user_cannot_retrieve_a_foreign_targets_reviews(client, db):
+    target = make_target(client, "token-a", "A cafe")
+
+    create_response = client.post(
+        f"/api/targets/{target['id']}/reviews",
+        json={"text": "Private review text", "rating": 5},
+        headers=bearer("token-a"),
+    )
+
+    assert create_response.status_code == 201
+    assert review_count(db) == 1
+
+    response = client.get(
+        f"/api/targets/{target['id']}/reviews",
+        headers=bearer("token-b"),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "target_not_found"
+    assert "Private review text" not in response.text
+
+
+def test_missing_and_foreign_review_reads_get_identical_responses(client):
+    target = make_target(client, "token-a", "A cafe")
+
+    foreign = client.get(
+        f"/api/targets/{target['id']}/reviews",
+        headers=bearer("token-b"),
+    )
+
+    missing = client.get(
+        "/api/targets/999999/reviews",
+        headers=bearer("token-b"),
+    )
+
+    assert foreign.status_code == missing.status_code == 404
+    assert foreign.json() == missing.json()
+
+
+@pytest.mark.parametrize(
+    "headers", [{}, bearer("forged-token"), {"Authorization": "Basic abc"}]
+)
+def test_unauthenticated_review_creation_is_rejected(client, db, headers):
+    target = make_target(client, "token-a", "A cafe")
+
+    response = client.post(
+        f"/api/targets/{target['id']}/reviews",
+        json={"text": "Unauthorized review", "rating": 5},
+        headers=headers,
+    )
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "unauthenticated"
+    assert review_count(db) == 0
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"text": "", "rating": 5},
+        {"text": "   ", "rating": 5},
+        {"text": "Review with invalid rating", "rating": 0},
+        {"text": "Review with invalid rating", "rating": 6},
+    ],
+)
+def test_invalid_review_input_is_rejected_without_persistence(client, db, payload):
+    target = make_target(client, "token-a", "A cafe")
+
+    response = client.post(
+        f"/api/targets/{target['id']}/reviews",
+        json=payload,
+        headers=bearer("token-a"),
+    )
+
+    assert response.status_code == 422
+    assert review_count(db) == 0
