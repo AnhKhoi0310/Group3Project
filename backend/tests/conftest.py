@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db import get_session
 from app.main import app
-from app.models import User
+from app.models import AnalysisTarget, Review, User
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -43,6 +43,9 @@ def session_factory(alembic_config):
 @pytest.fixture
 def db(session_factory):
     with session_factory() as session:
+        # Remove dependent records before their parents to satisfy foreign keys.
+        session.execute(delete(Review))
+        session.execute(delete(AnalysisTarget))
         session.execute(delete(User))
         session.commit()
         yield session
