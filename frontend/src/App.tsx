@@ -4,6 +4,7 @@ import RequireAuth from "./auth/RequireAuth";
 import Button from "./components/Button";
 import LoginPage from "./pages/LoginPage";
 import TargetsPage from "./pages/TargetsPage";
+import TargetWorkspacePage from "./pages/TargetWorkspacePage";
 
 export default function App() {
   const { session, logout } = useAuth();
@@ -42,6 +43,14 @@ export default function App() {
               </RequireAuth>
             }
           />
+          <Route
+    path="/targets/:targetId"
+    element={
+      <RequireAuth>
+        <TargetWorkspacePage />
+      </RequireAuth>
+    }
+  />
           <Route path="*" element={<Navigate to="/targets" replace />} />
         </Routes>
       </main>
