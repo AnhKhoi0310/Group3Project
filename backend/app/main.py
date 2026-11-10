@@ -2,12 +2,13 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import get_token_verifier
 from app.config import CorsSettings, get_settings
-from app.errors import ApiError, handle_api_error
-from app.routers import auth
+from app.errors import ApiError, handle_api_error, handle_validation_error
+from app.routers import auth, targets
 
 
 @asynccontextmanager
@@ -26,7 +27,9 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 app.add_exception_handler(ApiError, handle_api_error)
+app.add_exception_handler(RequestValidationError, handle_validation_error)
 app.include_router(auth.router)
+app.include_router(targets.router)
 
 
 @app.get("/api/health")
