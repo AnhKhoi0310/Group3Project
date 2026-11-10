@@ -55,7 +55,14 @@ export default function TargetsPage() {
               key={target.id}
               className="rounded-lg border border-slate-200 bg-white p-6"
             >
-              <h2 className="text-lg font-semibold">{target.name}</h2>
+              <h2 className="text-lg font-semibold">
+                <Link
+                  to={`/targets/${target.id}`}
+                  className="text-indigo-700 hover:underline"
+                >
+                  {target.name}
+                </Link>
+              </h2>
               <p className="mt-1 text-sm text-slate-600">
                 {PLATFORM_LABELS[target.platform] ?? target.platform}
               </p>

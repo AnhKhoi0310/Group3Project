@@ -5,6 +5,7 @@ import Button from "./components/Button";
 import CreateTargetPage from "./pages/CreateTargetPage";
 import LoginPage from "./pages/LoginPage";
 import TargetsPage from "./pages/TargetsPage";
+import TargetWorkspacePage from "./pages/TargetWorkspacePage";
 
 export default function App() {
   const { session, logout } = useAuth();
@@ -51,6 +52,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <CreateTargetPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/targets/:targetId"
+            element={
+              <RequireAuth>
+                <TargetWorkspacePage />
               </RequireAuth>
             }
           />

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ApiError } from "../api/client";
-import { createTarget, type AnalysisTarget } from "../api/targets";
+import { createTarget } from "../api/targets";
 import { useAuth } from "../auth/AuthContext";
 import Button from "../components/Button";
 import ErrorMessage from "../components/ErrorMessage";
@@ -12,20 +12,12 @@ const UNEXPECTED = "Something went wrong on our side. Please try again.";
 
 export default function CreateTargetPage() {
   const { api } = useAuth();
+  const navigate = useNavigate();
   const [name, setName] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [created, setCreated] = useState<AnalysisTarget | null>(null);
-
-  function reset() {
-    setName("");
-    setSourceUrl("");
-    setFieldErrors({});
-    setFormError("");
-    setCreated(null);
-  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -37,7 +29,7 @@ export default function CreateTargetPage() {
         name: name.trim(),
         source_url: sourceUrl.trim(),
       });
-      setCreated(target);
+      navigate(`/targets/${target.id}`, { state: { created: true } });
     } catch (caught) {
       if (caught instanceof ApiError) {
         if (Object.keys(caught.fieldErrors).length > 0) {
@@ -51,31 +43,6 @@ export default function CreateTargetPage() {
     } finally {
       setBusy(false);
     }
-  }
-
-  if (created) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">New target</h1>
-        <div
-          role="status"
-          className="rounded-lg border border-slate-200 bg-white p-6"
-        >
-          <h2 className="text-lg font-semibold">Target created</h2>
-          <p className="mt-2 text-slate-700">
-            {created.name} on {PLATFORM_LABEL} is saved to your account.
-          </p>
-          <div className="mt-4 flex items-center gap-3">
-            <Button variant="secondary" onClick={reset}>
-              Create another target
-            </Button>
-            <Link to="/targets" className="text-sm font-medium text-indigo-700">
-              View your targets
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
   }
 
   return (
