@@ -11,6 +11,7 @@ import { useAuth } from "../auth/AuthContext";
 import Button from "../components/Button";
 import ErrorMessage from "../components/ErrorMessage";
 import LoadingIndicator from "../components/LoadingIndicator";
+import ReviewList from "../components/ReviewList";
 
 const PLATFORM_LABELS: Record<string, string> = { google_maps: "Google Maps" };
 const UNEXPECTED = "Something went wrong on our side. Please try again.";
@@ -55,6 +56,7 @@ export default function TargetWorkspacePage() {
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState<IngestionAttempt | null>(null);
   const [ingestError, setIngestError] = useState("");
+  const [reviewsVersion, setReviewsVersion] = useState(0);
 
   useEffect(() => {
     if (!targetId) return;
@@ -108,6 +110,7 @@ export default function TargetWorkspacePage() {
       }
     } finally {
       setBusy(false);
+      setReviewsVersion((version) => version + 1);
     }
   }
 
@@ -190,6 +193,11 @@ export default function TargetWorkspacePage() {
           </p>
         )}
       </section>
+      <ReviewList
+        api={api}
+        targetId={String(target.id)}
+        refreshKey={reviewsVersion}
+      />
     </div>
   );
 }
