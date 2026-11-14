@@ -32,6 +32,8 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -45,8 +47,16 @@ jobs:
         run: ruff format --check .
       - name: Build
         run: python -m compileall -q app
-      - name: Unit tests
-        run: pytest
+      - name: Unit tests with coverage
+        run: pytest --cov=app --cov-report=xml:coverage.xml --cov-report=term-missing
+
+      - name: Check changed-code coverage
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin main
+          diff-cover coverage.xml \
+            --compare-branch=origin/main \
+            --fail-under=80
 
   frontend:
     name: Frontend checks
