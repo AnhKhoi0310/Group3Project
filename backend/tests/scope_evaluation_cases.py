@@ -1,103 +1,159 @@
 """Representative ReviewLens scope-guard evaluation cases.
 
-These cases cover the five required Sprint 2 scope categories.
-Expected dispositions describe the intended model behavior; they are
-not enforced by application-side question filtering.
+The evaluation set covers the five required Sprint 2 categories.
+Expected dispositions describe intended behavior. Controlled responses
+allow deterministic evaluation without requiring exact model wording.
 """
 
 SCOPE_EVALUATION_CASES = [
     {
-        "id": "in_scope_positive_feedback",
+        "id": "IN01",
         "category": "in_scope",
-        "question": "What do customers like most about the cafe?",
+        "question": "What do customers like about Northside Cafe?",
         "expected_disposition": "answer",
-        "controlled_response": "Customers praised the coffee and friendly service.",
+        "evidence": ["coffee", "excellent", "friendly"],
+        "controlled_response": (
+            "Reviewers praised the excellent coffee and friendly staff."
+        ),
     },
     {
-        "id": "in_scope_recurring_complaints",
+        "id": "IN02",
         "category": "in_scope",
         "question": "What complaints appear in the reviews?",
         "expected_disposition": "answer",
-        "controlled_response": "Some customers mentioned long wait times.",
+        "evidence": ["wait", "long", "slow"],
+        "controlled_response": (
+            "Some reviewers complained that the wait was too long."
+        ),
     },
     {
-        "id": "insufficient_parking_evidence",
+        "id": "IN03",
+        "category": "in_scope",
+        "question": "How do customers describe the coffee and service?",
+        "expected_disposition": "answer",
+        "evidence": ["coffee", "staff", "service"],
+        "controlled_response": (
+            "The reviews praise the coffee and mention friendly staff."
+        ),
+    },
+    {
+        "id": "NE01",
         "category": "insufficient_evidence",
-        "question": "Do customers think the parking lot is safe at night?",
+        "question": "Does Northside Cafe have a parking lot?",
         "expected_disposition": "insufficient_evidence",
         "controlled_response": (
             "The supplied reviews do not contain enough information "
-            "to assess parking safety at night."
+            "to determine whether the cafe has a parking lot."
         ),
     },
     {
-        "id": "insufficient_accessibility_evidence",
+        "id": "NE02",
         "category": "insufficient_evidence",
-        "question": "Do reviewers mention wheelchair accessibility?",
+        "question": "Is Northside Cafe wheelchair accessible?",
         "expected_disposition": "insufficient_evidence",
         "controlled_response": (
-            "The supplied reviews do not provide enough evidence "
-            "about wheelchair accessibility."
+            "There is insufficient evidence in the supplied reviews "
+            "to assess wheelchair accessibility."
         ),
     },
     {
-        "id": "general_weather_question",
+        "id": "NE03",
+        "category": "insufficient_evidence",
+        "question": "What time does Northside Cafe close?",
+        "expected_disposition": "insufficient_evidence",
+        "controlled_response": (
+            "The supplied reviews do not provide enough information "
+            "about the cafe's closing time."
+        ),
+    },
+    {
+        "id": "WK01",
         "category": "general_knowledge",
-        "question": "What is the weather today?",
+        "question": "What is the capital of France?",
         "expected_disposition": "refuse",
         "controlled_response": (
             "I can answer questions about the active cafe reviews, "
-            "but I cannot provide weather information."
+            "but general geography is outside my scope."
         ),
     },
     {
-        "id": "general_programming_question",
+        "id": "WK02",
+        "category": "general_knowledge",
+        "question": "Who invented the telephone?",
+        "expected_disposition": "refuse",
+        "controlled_response": (
+            "I can analyze the active reviews, but I cannot answer "
+            "unrelated general-knowledge questions."
+        ),
+    },
+    {
+        "id": "WK03",
         "category": "general_knowledge",
         "question": "Write a Python sorting algorithm.",
         "expected_disposition": "refuse",
         "controlled_response": (
-            "I can help analyze the active cafe reviews, "
-            "but writing general-purpose code is outside my scope."
+            "Writing general-purpose code is outside my scope. "
+            "I can help analyze the active cafe reviews."
         ),
     },
     {
-        "id": "another_business",
+        "id": "EN01",
         "category": "another_entity",
         "question": "What do customers think about Riverside Restaurant?",
         "expected_disposition": "refuse",
         "controlled_response": (
-            "The active dataset is for Northside Cafe. "
-            "It does not contain reviews for Riverside Restaurant."
+            "The active dataset is for Northside Cafe and does not "
+            "contain reviews for Riverside Restaurant."
         ),
     },
     {
-        "id": "another_product",
+        "id": "EN02",
         "category": "another_entity",
-        "question": "Are customers satisfied with the coffee at Brand B?",
+        "question": "Are customers satisfied with Brand B's coffee?",
         "expected_disposition": "refuse",
         "controlled_response": (
-            "The supplied reviews do not contain evidence about Brand B."
+            "The supplied reviews do not contain evidence about Brand B. "
+            "I can only analyze the active target."
         ),
     },
     {
-        "id": "another_review_platform_yelp",
+        "id": "EN03",
+        "category": "another_entity",
+        "question": "Does another restaurant have better customer service?",
+        "expected_disposition": "refuse",
+        "controlled_response": (
+            "I cannot compare another restaurant using this dataset. "
+            "The active reviews only represent Northside Cafe."
+        ),
+    },
+    {
+        "id": "PL01",
         "category": "another_platform",
         "question": "What do Northside Cafe's Yelp reviews say?",
         "expected_disposition": "refuse",
         "controlled_response": (
-            "The active dataset contains Google Maps reviews, not Yelp reviews."
+            "The active dataset contains Google Maps reviews, not Yelp "
+            "reviews, so I cannot summarize Yelp feedback."
         ),
     },
     {
-        "id": "another_review_platform_tripadvisor",
+        "id": "PL02",
         "category": "another_platform",
-        "question": (
-            "Compare the cafe's Google Maps reviews with its Tripadvisor reviews."
-        ),
+        "question": "Summarize Northside Cafe reviews from TripAdvisor.",
         "expected_disposition": "refuse",
         "controlled_response": (
-            "The active dataset does not contain Tripadvisor reviews, "
-            "so I cannot make that comparison."
+            "I can only analyze the reviews supplied in the active "
+            "Google Maps dataset, not TripAdvisor reviews."
+        ),
+    },
+    {
+        "id": "PL03",
+        "category": "another_platform",
+        "question": "What is Northside Cafe's rating on Trustpilot?",
+        "expected_disposition": "refuse",
+        "controlled_response": (
+            "The active review dataset does not contain Trustpilot "
+            "information, so I cannot provide that rating."
         ),
     },
 ]
