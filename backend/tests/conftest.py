@@ -1,3 +1,4 @@
+
 import os
 from pathlib import Path
 
@@ -9,6 +10,8 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from app.models import AnalysisTarget, IngestionAttempt, Review, User
+
+pytest_plugins = ("test_s1_022_s1_023",)
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
