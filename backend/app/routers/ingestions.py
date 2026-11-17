@@ -340,21 +340,32 @@ class ReviewSummaryRead(BaseModel):
     rating_distribution: dict[int, int]
 
 
-@router.get("/targets/{target_id}/summary", response_model=ReviewSummaryRead)
+@router.get("/{target_id}/summary", response_model=ReviewSummaryRead)
 def get_target_review_summary(
     target_id: int,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
 ) -> ReviewSummaryRead:
     """Return deterministic review count and rating metrics for an owned target."""
-    target = _get_owned_target(session, target_id, user.id)
-    summary = summarize_reviews_for_target(session, target.id)
-    return ReviewSummaryRead(
-        target_id=target.id,
-        target_name=target.name,
-        review_count=summary["review_count"],
-        average_rating=summary["average_rating"],
-        rating_distribution=summary["rating_distribution"],
-    )
-
-
+    try:
+        target = get_target_for_owner(session, target_id, owner_id=user.id)
+        if target is None:
+            raise _target_not_found()
+        
+        summary = summarize_reviews_for_target(session, target.id)
+        return ReviewSummaryRead(
+            target_id=target.id,
+            target_name=target.name,
+            review_count=summary["review_count"],
+            average_rating=summary["average_rating"],
+            rating_distribution=summary["rating_distribution"],
+        )
+    except ApiError:
+        raise
+    except SQLAlchemyError:
+        logger.exception("Could not load summary for target %s", target_id)
+        raise ApiError(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "unexpected",
+            "Something went wrong on our side. Please try again.",
+        ) from None
