@@ -235,8 +235,6 @@ def start_ingestion(
     "/{target_id}/ingestions/latest",
     response_model=IngestionRead | None,
 )
-
-
 def get_latest_ingestion(
     target_id: int,
     user: Annotated[User, Depends(get_current_user)],
@@ -351,7 +349,7 @@ def get_target_review_summary(
         target = get_target_for_owner(session, target_id, owner_id=user.id)
         if target is None:
             raise _target_not_found()
-        
+
         summary = summarize_reviews_for_target(session, target.id)
         return ReviewSummaryRead(
             target_id=target.id,

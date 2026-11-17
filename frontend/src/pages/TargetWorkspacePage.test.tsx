@@ -31,7 +31,6 @@ const POPULATED_SUMMARY = {
   rating_distribution: { "1": 0, "2": 0, "3": 1, "4": 1, "5": 2 },
 };
 
-
 function renderPage(api = createFakeApi(), state?: { created: boolean }) {
   render(
     <MemoryRouter initialEntries={[{ pathname: "/targets/1", state }]}>
@@ -44,7 +43,6 @@ function renderPage(api = createFakeApi(), state?: { created: boolean }) {
   );
   return api;
 }
-
 
 /** GET target returns TARGET; GET /summary returns summary; POST runs ingest */
 function apiWithState(
@@ -74,7 +72,6 @@ function apiWithState(
 function apiWithIngestion(ingest: () => Promise<unknown>) {
   return apiWithState(EMPTY_SUMMARY, ingest);
 }
-
 
 async function openAndCollect(api: ReturnType<typeof createFakeApi>) {
   renderPage(api);
