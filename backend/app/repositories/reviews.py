@@ -81,3 +81,22 @@ def list_reviews_for_target(session: Session, target_id: int) -> list[Review]:
         .order_by(Review.created_at.desc(), Review.id.desc())
     )
     return list(session.scalars(query).all())
+
+
+def summarize_reviews_for_target(session: Session, target_id: int) -> dict:
+    """Compute review count, average rating, and star counts from persisted rows."""
+    ratings = list(
+        session.scalars(select(Review.rating).where(Review.target_id == target_id)).all()
+    )
+    review_count = len(ratings)
+    distribution = {star: 0 for star in range(1, 6)}
+    for rating in ratings:
+        bucket = max(1, min(5, round(rating)))
+        distribution[bucket] += 1
+
+    average_rating = round(sum(ratings) / review_count, 1) if review_count > 0 else None
+    return {
+        "review_count": review_count,
+        "average_rating": average_rating,
+        "rating_distribution": distribution,
+    }
