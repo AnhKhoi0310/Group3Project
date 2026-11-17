@@ -77,6 +77,10 @@ def test_collect_reviews_skips_invalid_records():
 
     assert outcome.reviews_found == 1
     assert outcome.reviews_skipped == 2
+    assert outcome.skipped_reasons == {
+        "invalid_rating": 1,
+        "missing_text": 1,
+    }
 
 
 def test_collect_reviews_rejects_invalid_source_before_fetch():
