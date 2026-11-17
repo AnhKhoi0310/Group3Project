@@ -173,6 +173,21 @@ describe("TargetWorkspacePage review collection", () => {
     });
   });
 
+
+  it("displays Partial success when ingestion finishes with zero usable reviews", async () => {
+    const api = apiWithState(RESULT_EMPTY);
+    renderPage(api);
+
+    expect(
+      await screen.findByTestId("ingestion-status-badge"),
+    ).toHaveTextContent("Partial success");
+    expect(
+      screen.getByText(
+        "Ingestion finished, but no usable reviews were added to the dataset.",
+      ),
+    ).toBeVisible();
+  });
+
   it("disables the button and explains the wait while collecting", async () => {
     const api = apiWithIngestion(() => new Promise(() => {}));
     await openAndCollect(api);
