@@ -12,6 +12,7 @@ import Button from "../components/Button";
 import ErrorMessage from "../components/ErrorMessage";
 import LoadingIndicator from "../components/LoadingIndicator";
 import ReviewList from "../components/ReviewList";
+import ReviewSummaryCard from "../components/ReviewSummaryCard";
 
 const PLATFORM_LABELS: Record<string, string> = { google_maps: "Google Maps" };
 const UNEXPECTED = "Something went wrong on our side. Please try again.";
@@ -193,6 +194,12 @@ export default function TargetWorkspacePage() {
           </p>
         )}
       </section>
+      <ReviewSummaryCard
+        api={api}
+        targetId={String(target.id)}
+        targetName={target.name}
+        refreshKey={reviewsVersion}
+      />
       <ReviewList
         api={api}
         targetId={String(target.id)}
