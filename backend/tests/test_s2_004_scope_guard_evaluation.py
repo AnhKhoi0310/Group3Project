@@ -1,7 +1,5 @@
 
 import pytest
-
-from app.services.qa import answer_question
 from fake_llm import FakeLLM
 from scope_evaluation_cases import (
     EXPECTED_DISPOSITIONS,
@@ -15,6 +13,7 @@ from test_s2_003_qa_harness import (
     create_user,
 )
 
+from app.services.qa import answer_question
 
 VALID_DISPOSITIONS = {
     "answer",
