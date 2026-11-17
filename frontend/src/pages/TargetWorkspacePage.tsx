@@ -45,13 +45,8 @@ function describeAttempt(attempt: IngestionAttempt): string {
   } skipped because they had no text or rating.`;
 }
 
-
 type DisplayIngestionStatus =
-  | "Not started"
-  | "Processing"
-  | "Succeeded"
-  | "Partial success"
-  | "Failed";
+  "Not started" | "Processing" | "Succeeded" | "Partial success" | "Failed";
 
 function getDisplayStatus(
   busy: boolean,

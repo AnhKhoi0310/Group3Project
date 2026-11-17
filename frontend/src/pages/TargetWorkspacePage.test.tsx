@@ -173,7 +173,6 @@ describe("TargetWorkspacePage review collection", () => {
     });
   });
 
-
   it("displays Partial success when ingestion finishes with zero usable reviews", async () => {
     const api = apiWithState(RESULT_EMPTY);
     renderPage(api);
@@ -195,9 +194,7 @@ describe("TargetWorkspacePage review collection", () => {
     expect(
       await screen.findByRole("button", { name: "Collecting reviews…" }),
     ).toBeDisabled();
-    expect(
-      screen.getByText(/Ingestion is currently running/),
-    ).toBeVisible();
+    expect(screen.getByText(/Ingestion is currently running/)).toBeVisible();
   });
 
   it("shows the backend's friendly message when collection fails", async () => {
