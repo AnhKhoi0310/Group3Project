@@ -14,6 +14,7 @@ from app.config import get_settings
 from app.db import get_session
 from app.errors import ApiError
 from app.models import IngestionAttempt, User
+from app.repositories.reviews import summarize_reviews_for_target
 from app.repositories.ingestions import (
     complete_attempt,
     create_attempt,
@@ -234,6 +235,34 @@ def start_ingestion(
     "/{target_id}/ingestions/latest",
     response_model=IngestionRead | None,
 )
+
+
+class ReviewSummaryRead(BaseModel):
+    target_id: int
+    target_name: str
+    review_count: int
+    average_rating: float | None
+    rating_distribution: dict[int, int]
+
+
+@router.get("/targets/{target_id}/summary", response_model=ReviewSummaryRead)
+def get_target_review_summary(
+    target_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_session)],
+) -> ReviewSummaryRead:
+    """Return deterministic review count and rating metrics for an owned target."""
+    target = _get_owned_target(session, target_id, user.id)
+    summary = summarize_reviews_for_target(session, target.id)
+    return ReviewSummaryRead(
+        target_id=target.id,
+        target_name=target.name,
+        review_count=summary["review_count"],
+        average_rating=summary["average_rating"],
+        rating_distribution=summary["rating_distribution"],
+    )
+
+
 def get_latest_ingestion(
     target_id: int,
     user: Annotated[User, Depends(get_current_user)],
