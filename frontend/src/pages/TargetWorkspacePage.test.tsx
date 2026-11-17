@@ -13,7 +13,27 @@ const TARGET = {
   created_at: "2026-11-10T00:00:00",
 };
 
-const RESULT = { target_id: 1, reviews_found: 12, reviews_skipped: 2 };
+// const RESULT = { target_id: 1, reviews_found: 12, reviews_skipped: 2 };
+const RESULT_PARTIAL = {
+  target_id: 1,
+  status: "succeeded",
+  reviews_found: 12,
+  reviews_skipped: 2,
+};
+
+const RESULT_SUCCEEDED = {
+  target_id: 1,
+  status: "succeeded",
+  reviews_found: 12,
+  reviews_skipped: 0,
+};
+
+const RESULT_EMPTY = {
+  target_id: 1,
+  status: "succeeded",
+  reviews_found: 0,
+  reviews_skipped: 0,
+};
 
 function renderPage(api = createFakeApi(), state?: { created: boolean }) {
   render(
@@ -28,13 +48,27 @@ function renderPage(api = createFakeApi(), state?: { created: boolean }) {
   return api;
 }
 
+/** GET target returns TARGET; GET latest ingestion returns latestAttempt; POST runs ingest */
+function apiWithState(
+  latestAttempt: unknown = null,
+  ingest?: () => Promise<unknown>,
+) {
+  const api = createFakeApi();
+  api.request.mockImplementation(async (path: string, init?: RequestInit) => {
+    if (init?.method === "POST") {
+      return ingest ? ingest() : RESULT_SUCCEEDED;
+    }
+    if (path.endsWith("/ingestions/latest")) {
+      return latestAttempt;
+    }
+    return TARGET;
+  });
+  return api;
+}
+
 /** GET returns the target; POST (ingestion) runs the given behavior. */
 function apiWithIngestion(ingest: () => Promise<unknown>) {
-  const api = createFakeApi();
-  api.request.mockImplementation(async (_path: string, init?: RequestInit) =>
-    init?.method === "POST" ? ingest() : TARGET,
-  );
-  return api;
+  return apiWithState(null, ingest);
 }
 
 async function openAndCollect(api: ReturnType<typeof createFakeApi>) {
@@ -46,8 +80,9 @@ async function openAndCollect(api: ReturnType<typeof createFakeApi>) {
 
 describe("TargetWorkspacePage", () => {
   it("identifies the active target, platform, source and ingestion state", async () => {
-    const api = createFakeApi();
-    api.request.mockResolvedValue(TARGET);
+    //const api = createFakeApi();
+    const api = apiWithState(null);
+    //api.request.mockResolvedValue(TARGET);
     renderPage(api);
 
     expect(
@@ -124,16 +159,32 @@ describe("TargetWorkspacePage", () => {
 });
 
 describe("TargetWorkspacePage review collection", () => {
-  it("starts ingestion for this target and shows the result", async () => {
-    const api = apiWithIngestion(async () => RESULT);
+  it("starts ingestion for this target and shows a partial result when records are skipped", async () => {
+    const api = apiWithIngestion(async () => RESULT_PARTIAL);
     await openAndCollect(api);
 
     expect(await screen.findByText(/Found 12 reviews/)).toBeVisible();
     expect(screen.getByText(/2 were skipped/)).toBeVisible();
-    expect(screen.getByText("Reviews found")).toBeVisible();
+    expect(screen.getByTestId("ingestion-status-badge")).toHaveTextContent(
+      "Partial success",
+    );
     expect(api.request).toHaveBeenCalledWith("/api/targets/1/ingestions", {
       method: "POST",
     });
+  });
+
+  it("displays Partial success when ingestion finishes with zero usable reviews", async () => {
+    const api = apiWithState(RESULT_EMPTY);
+    renderPage(api);
+
+    expect(
+      await screen.findByTestId("ingestion-status-badge"),
+    ).toHaveTextContent("Partial success");
+    expect(
+      screen.getByText(
+        "Ingestion finished, but no usable reviews were added to the dataset.",
+      ),
+    ).toBeVisible();
   });
 
   it("disables the button and explains the wait while collecting", async () => {
@@ -143,7 +194,7 @@ describe("TargetWorkspacePage review collection", () => {
     expect(
       await screen.findByRole("button", { name: "Collecting reviews…" }),
     ).toBeDisabled();
-    expect(screen.getByText(/This can take a moment/)).toBeVisible();
+    expect(screen.getByText(/Ingestion is currently running/)).toBeVisible();
   });
 
   it("shows the backend's friendly message when collection fails", async () => {
