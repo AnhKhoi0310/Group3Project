@@ -20,3 +20,20 @@ export function listReviews(
     `/api/targets/${encodeURIComponent(targetId)}/reviews`,
   );
 }
+
+export interface ReviewSummary {
+  target_id: number;
+  target_name: string;
+  review_count: number;
+  average_rating: number | null;
+  rating_distribution: Record<string, number>;
+}
+
+export function getReviewSummary(
+  api: ApiClient,
+  targetId: string,
+): Promise<ReviewSummary> {
+  return api.request<ReviewSummary>(
+    `/api/targets/${encodeURIComponent(targetId)}/summary`,
+  );
+}
