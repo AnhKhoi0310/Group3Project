@@ -165,7 +165,9 @@ describe("TargetWorkspacePage review collection", () => {
 
     expect(await screen.findByText(/Found 12 reviews/)).toBeVisible();
     expect(screen.getByText(/2 were skipped/)).toBeVisible();
-    expect(screen.getByText("Reviews found")).toBeVisible();
+    expect(screen.getByTestId("ingestion-status-badge")).toHaveTextContent(
+      "Partial success",
+    );
     expect(api.request).toHaveBeenCalledWith("/api/targets/1/ingestions", {
       method: "POST",
     });
