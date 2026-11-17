@@ -19,12 +19,12 @@ from app.repositories.ingestions import (
     create_attempt,
     fail_attempt,
     get_latest_attempt_for_target,
-    summarize_reviews_for_target,
 )
 from app.repositories.reviews import (
     create_review,
     list_reviews_for_target,
     save_reviews,
+    summarize_reviews_for_target,
 )
 from app.repositories.targets import get_target_for_owner
 from app.schemas import ReviewCreate
