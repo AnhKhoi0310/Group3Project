@@ -1,4 +1,3 @@
-
 """Integration tests for persisted reviews and target isolation."""
 
 import test_s1_022_s1_023 as s1_helpers
@@ -87,14 +86,10 @@ def test_switching_targets_returns_different_reviews(client, fetcher):
     target_a = s1_helpers.create_target(client, "Target A")
     target_b = s1_helpers.create_target(client, "Target B")
 
-    fetcher.reviews = [
-        {"review_id": "a1", "rating": 5, "snippet": "Review for A"}
-    ]
+    fetcher.reviews = [{"review_id": "a1", "rating": 5, "snippet": "Review for A"}]
     assert s1_helpers.start(client, target_a["id"]).status_code == 200
 
-    fetcher.reviews = [
-        {"review_id": "b1", "rating": 2, "snippet": "Review for B"}
-    ]
+    fetcher.reviews = [{"review_id": "b1", "rating": 2, "snippet": "Review for B"}]
     assert s1_helpers.start(client, target_b["id"]).status_code == 200
 
     def get_reviews(target_id):
