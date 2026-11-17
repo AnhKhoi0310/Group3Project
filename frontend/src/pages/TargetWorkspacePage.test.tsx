@@ -15,6 +15,23 @@ const TARGET = {
 
 const RESULT = { target_id: 1, reviews_found: 12, reviews_skipped: 2 };
 
+const EMPTY_SUMMARY = {
+  target_id: 1,
+  target_name: "Example Cafe",
+  review_count: 0,
+  average_rating: null,
+  rating_distribution: { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 },
+};
+
+const POPULATED_SUMMARY = {
+  target_id: 1,
+  target_name: "Example Cafe",
+  review_count: 4,
+  average_rating: 4.3,
+  rating_distribution: { "1": 0, "2": 0, "3": 1, "4": 1, "5": 2 },
+};
+
+
 function renderPage(api = createFakeApi(), state?: { created: boolean }) {
   render(
     <MemoryRouter initialEntries={[{ pathname: "/targets/1", state }]}>
@@ -28,14 +45,36 @@ function renderPage(api = createFakeApi(), state?: { created: boolean }) {
   return api;
 }
 
-/** GET returns the target; POST (ingestion) runs the given behavior. */
-function apiWithIngestion(ingest: () => Promise<unknown>) {
+
+/** GET target returns TARGET; GET /summary returns summary; POST runs ingest */
+function apiWithState(
+  summary: unknown = EMPTY_SUMMARY,
+  ingest?: () => Promise<unknown>,
+) {
   const api = createFakeApi();
-  api.request.mockImplementation(async (_path: string, init?: RequestInit) =>
-    init?.method === "POST" ? ingest() : TARGET,
-  );
+  api.request.mockImplementation(async (path: string, init?: RequestInit) => {
+    if (init?.method === "POST") {
+      return ingest ? ingest() : RESULT;
+    }
+    if (path.endsWith("/ingestions/latest")) {
+      return null;
+    }
+    if (path.endsWith("/summary")) {
+      return summary;
+    }
+    if (path.endsWith("/reviews")) {
+      return [];
+    }
+    return TARGET;
+  });
   return api;
 }
+
+/** GET returns the target; POST (ingestion) runs the given behavior. */
+function apiWithIngestion(ingest: () => Promise<unknown>) {
+  return apiWithState(EMPTY_SUMMARY, ingest);
+}
+
 
 async function openAndCollect(api: ReturnType<typeof createFakeApi>) {
   renderPage(api);
@@ -46,8 +85,7 @@ async function openAndCollect(api: ReturnType<typeof createFakeApi>) {
 
 describe("TargetWorkspacePage", () => {
   it("identifies the active target, platform, source and ingestion state", async () => {
-    const api = createFakeApi();
-    api.request.mockResolvedValue(TARGET);
+    const api = apiWithState();
     renderPage(api);
 
     expect(
@@ -63,8 +101,7 @@ describe("TargetWorkspacePage", () => {
   });
 
   it("shows a confirmation after a target was just created", async () => {
-    const api = createFakeApi();
-    api.request.mockResolvedValue(TARGET);
+    const api = apiWithState();
     renderPage(api, { created: true });
 
     expect(await screen.findByText(/Target created/)).toBeVisible();
@@ -72,8 +109,7 @@ describe("TargetWorkspacePage", () => {
   });
 
   it("shows no confirmation when opened normally", async () => {
-    const api = createFakeApi();
-    api.request.mockResolvedValue(TARGET);
+    const api = apiWithState();
     renderPage(api);
 
     await screen.findByRole("heading", { name: "Example Cafe" });
@@ -176,5 +212,61 @@ describe("TargetWorkspacePage review collection", () => {
       "Something went wrong on our side.",
     );
     expect(screen.queryByText(/secret-sql/)).not.toBeInTheDocument();
+  });
+});
+
+describe("TargetWorkspacePage review summary", () => {
+  it("displays the review count, average rating, and rating distribution for the active target", async () => {
+    const api = apiWithState(POPULATED_SUMMARY);
+    renderPage(api);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Review summary for Example Cafe",
+      }),
+    ).toBeVisible();
+    expect(screen.getByTestId("summary-review-count")).toHaveTextContent("4");
+    expect(screen.getByTestId("summary-average-rating")).toHaveTextContent(
+      "4.3 / 5",
+    );
+    expect(screen.getByText("5 ★").nextSibling).toHaveTextContent("2");
+    expect(screen.getByText("4 ★").nextSibling).toHaveTextContent("1");
+    expect(screen.getByText("3 ★").nextSibling).toHaveTextContent("1");
+  });
+
+  it("shows zero reviews and no ratings yet when no reviews have been ingested", async () => {
+    const api = apiWithState(EMPTY_SUMMARY);
+    renderPage(api);
+
+    expect(await screen.findByTestId("summary-review-count")).toHaveTextContent(
+      "0",
+    );
+    expect(screen.getByTestId("summary-average-rating")).toHaveTextContent(
+      "No ratings yet",
+    );
+  });
+
+  it("shows a safe error message if the review summary fails to load", async () => {
+    const api = createFakeApi();
+    api.request.mockImplementation(async (path: string) => {
+      if (path.endsWith("/summary")) {
+        throw new Error("DB connection failed: secret-db");
+      }
+      if (path.endsWith("/ingestions/latest")) {
+        return null;
+      }
+      if (path.endsWith("/reviews")) {
+        return [];
+      }
+      return TARGET;
+    });
+    renderPage(api);
+
+    expect(
+      await screen.findByText(
+        "We couldn't load the review summary. Please try again.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText(/secret-db/)).not.toBeInTheDocument();
   });
 });
