@@ -122,9 +122,10 @@ def _record_failure(
         )
 
 
-def _attempt_response(attempt: IngestionAttempt, 
-                     skipped_reasons: dict[str, int] | None = None,
-                     ) -> IngestionRead:
+def _attempt_response(
+    attempt: IngestionAttempt,
+    skipped_reasons: dict[str, int] | None = None,
+) -> IngestionRead:
     return IngestionRead(
         attempt_id=attempt.id,
         target_id=attempt.target_id,
