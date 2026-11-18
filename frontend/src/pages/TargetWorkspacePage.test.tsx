@@ -13,7 +13,26 @@ const TARGET = {
   created_at: "2026-11-10T00:00:00",
 };
 
-const RESULT = { target_id: 1, reviews_found: 12, reviews_skipped: 2 };
+const RESULT_PARTIAL = {
+  target_id: 1,
+  status: "succeeded",
+  reviews_found: 12,
+  reviews_skipped: 2,
+};
+
+const RESULT_SUCCEEDED = {
+  target_id: 1,
+  status: "succeeded",
+  reviews_found: 12,
+  reviews_skipped: 0,
+};
+
+const RESULT_EMPTY = {
+  target_id: 1,
+  status: "succeeded",
+  reviews_found: 0,
+  reviews_skipped: 0,
+};
 
 const EMPTY_SUMMARY = {
   target_id: 1,
@@ -44,33 +63,45 @@ function renderPage(api = createFakeApi(), state?: { created: boolean }) {
   return api;
 }
 
-/** GET target returns TARGET; GET /summary returns summary; POST runs ingest */
+/**
+ * GET target returns TARGET.
+ * GET summary returns summary.
+ * GET latest ingestion returns latestAttempt.
+ * POST runs ingestion.
+ */
 function apiWithState(
   summary: unknown = EMPTY_SUMMARY,
+  latestAttempt: unknown = null,
   ingest?: () => Promise<unknown>,
 ) {
   const api = createFakeApi();
+
   api.request.mockImplementation(async (path: string, init?: RequestInit) => {
     if (init?.method === "POST") {
-      return ingest ? ingest() : RESULT;
+      return ingest ? ingest() : RESULT_SUCCEEDED;
     }
+
     if (path.endsWith("/ingestions/latest")) {
-      return null;
+      return latestAttempt;
     }
+
     if (path.endsWith("/summary")) {
       return summary;
     }
+
     if (path.endsWith("/reviews")) {
       return [];
     }
+
     return TARGET;
   });
+
   return api;
 }
 
 /** GET returns the target; POST (ingestion) runs the given behavior. */
 function apiWithIngestion(ingest: () => Promise<unknown>) {
-  return apiWithState(EMPTY_SUMMARY, ingest);
+  return apiWithState(EMPTY_SUMMARY, null, ingest);
 }
 
 async function openAndCollect(api: ReturnType<typeof createFakeApi>) {
@@ -157,16 +188,32 @@ describe("TargetWorkspacePage", () => {
 });
 
 describe("TargetWorkspacePage review collection", () => {
-  it("starts ingestion for this target and shows the result", async () => {
-    const api = apiWithIngestion(async () => RESULT);
+  it("starts ingestion for this target and shows a partial result when records are skipped", async () => {
+    const api = apiWithIngestion(async () => RESULT_PARTIAL);
     await openAndCollect(api);
 
     expect(await screen.findByText(/Found 12 reviews/)).toBeVisible();
     expect(screen.getByText(/2 were skipped/)).toBeVisible();
-    expect(screen.getByText("Reviews found")).toBeVisible();
+    expect(screen.getByTestId("ingestion-status-badge")).toHaveTextContent(
+      "Partial success",
+    );
     expect(api.request).toHaveBeenCalledWith("/api/targets/1/ingestions", {
       method: "POST",
     });
+  });
+
+  it("displays Succeeded when ingestion completes with zero usable reviews", async () => {
+    const api = apiWithState(EMPTY_SUMMARY, RESULT_EMPTY);
+    renderPage(api);
+
+    expect(
+      await screen.findByTestId("ingestion-status-badge"),
+    ).toHaveTextContent("Succeeded");
+    expect(
+      screen.getByText(
+        "Ingestion completed, but no usable reviews were added to the dataset.",
+      ),
+    ).toBeVisible();
   });
 
   it("disables the button and explains the wait while collecting", async () => {
@@ -176,7 +223,7 @@ describe("TargetWorkspacePage review collection", () => {
     expect(
       await screen.findByRole("button", { name: "Collecting reviews…" }),
     ).toBeDisabled();
-    expect(screen.getByText(/This can take a moment/)).toBeVisible();
+    expect(screen.getByText(/Ingestion is currently running/)).toBeVisible();
   });
 
   it("shows the backend's friendly message when collection fails", async () => {
@@ -245,18 +292,23 @@ describe("TargetWorkspacePage review summary", () => {
 
   it("shows a safe error message if the review summary fails to load", async () => {
     const api = createFakeApi();
+
     api.request.mockImplementation(async (path: string) => {
       if (path.endsWith("/summary")) {
         throw new Error("DB connection failed: secret-db");
       }
+
       if (path.endsWith("/ingestions/latest")) {
         return null;
       }
+
       if (path.endsWith("/reviews")) {
         return [];
       }
+
       return TARGET;
     });
+
     renderPage(api);
 
     expect(

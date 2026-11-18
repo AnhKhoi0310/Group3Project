@@ -46,6 +46,65 @@ function describeAttempt(attempt: IngestionAttempt): string {
   } skipped because they had no text or rating.`;
 }
 
+type DisplayIngestionStatus =
+  "Not started" | "Processing" | "Succeeded" | "Partial success" | "Failed";
+
+function getDisplayStatus(
+  busy: boolean,
+  attempt: IngestionAttempt | null,
+): DisplayIngestionStatus {
+  if (busy || attempt?.status === "processing") {
+    return "Processing";
+  }
+  if (!attempt) {
+    return "Not started";
+  }
+  if (attempt.status === "failed") {
+    return "Failed";
+  }
+  if (attempt.reviews_skipped > 0) {
+    return "Partial success";
+  }
+  return "Succeeded";
+}
+
+function getStatusBadgeClasses(status: DisplayIngestionStatus): string {
+  switch (status) {
+    case "Succeeded":
+      return "border-emerald-300 bg-emerald-50 text-emerald-800";
+    case "Partial success":
+      return "border-amber-300 bg-amber-50 text-amber-800";
+    case "Failed":
+      return "border-rose-300 bg-rose-50 text-rose-800";
+    case "Processing":
+      return "border-indigo-300 bg-indigo-50 text-indigo-800";
+    default:
+      return "border-slate-300 bg-slate-100 text-slate-700";
+  }
+}
+
+function describeDatasetReadiness(
+  status: DisplayIngestionStatus,
+  attempt: IngestionAttempt | null,
+): string {
+  switch (status) {
+    case "Processing":
+      return "Ingestion is currently running. Analysis will be ready once collection finishes.";
+    case "Succeeded":
+      return attempt && attempt.reviews_found === 0
+        ? "Ingestion completed, but no usable reviews were added to the dataset."
+        : "Dataset is ready for analysis.";
+    case "Partial success":
+      return attempt && attempt.reviews_found > 0
+        ? "Dataset is ready for analysis, though some source records were skipped."
+        : "Ingestion finished, but no usable reviews were added to the dataset.";
+    case "Failed":
+      return "The latest ingestion attempt failed. Any previously saved reviews remain available.";
+    default:
+      return "No ingestion has been run for this target yet. Collect reviews to build an analysis dataset.";
+  }
+}
+
 export default function TargetWorkspacePage() {
   const { api } = useAuth();
   const { targetId } = useParams();
@@ -129,13 +188,8 @@ export default function TargetWorkspacePage() {
 
   if (!target) return <LoadingIndicator />;
 
-  const statusLabel = busy
-    ? "Processing"
-    : attempt?.status === "succeeded"
-      ? "Reviews found"
-      : attempt?.status === "failed"
-        ? "Failed"
-        : "Not started";
+  const displayStatus = getDisplayStatus(busy, attempt);
+  const isProcessing = busy || attempt?.status === "processing";
 
   return (
     <div className="space-y-6">
@@ -166,31 +220,34 @@ export default function TargetWorkspacePage() {
           Target created. It is saved to your account.
         </p>
       )}
-      <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-6">
-        <h2 className="text-lg font-semibold">Review collection</h2>
-        <p className="text-sm text-slate-600">
-          Status:{" "}
-          <span className="rounded-md border border-slate-300 bg-slate-100 px-2 py-0.5 font-medium">
-            {statusLabel}
+      <section
+        aria-labelledby="ingestion-status-heading"
+        className="space-y-4 rounded-lg border border-slate-200 bg-white p-6"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="ingestion-status-heading" className="text-lg font-semibold">
+            Ingestion status for {target.name}
+          </h2>
+          <span
+            data-testid="ingestion-status-badge"
+            className={`rounded-md border px-2.5 py-0.5 text-sm font-medium ${getStatusBadgeClasses(displayStatus)}`}
+          >
+            {displayStatus}
           </span>
+        </div>
+
+        <p className="text-sm text-slate-700">
+          {describeDatasetReadiness(displayStatus, attempt)}
         </p>
-        <Button onClick={collect} disabled={busy}>
-          {busy ? "Collecting reviews…" : "Collect reviews"}
+
+        <Button onClick={collect} disabled={isProcessing}>
+          {isProcessing ? "Collecting reviews…" : "Collect reviews"}
         </Button>
-        {busy && (
-          <p className="text-sm text-slate-600">
-            Collecting reviews from the source. This can take a moment.
-          </p>
-        )}
+
         {ingestError && <ErrorMessage message={ingestError} />}
         {attempt?.status === "succeeded" && (
           <p role="status" className="text-sm text-slate-700">
             {describeAttempt(attempt)}
-          </p>
-        )}
-        {attempt?.status === "failed" && (
-          <p className="text-sm text-slate-600">
-            The last attempt failed. Existing saved reviews have been retained.
           </p>
         )}
       </section>
