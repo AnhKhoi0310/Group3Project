@@ -1,3 +1,4 @@
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ApiError } from "../api/client";
@@ -13,7 +14,6 @@ const TARGET = {
   created_at: "2026-11-10T00:00:00",
 };
 
-// const RESULT = { target_id: 1, reviews_found: 12, reviews_skipped: 2 };
 const RESULT_PARTIAL = {
   target_id: 1,
   status: "succeeded",
@@ -80,9 +80,7 @@ async function openAndCollect(api: ReturnType<typeof createFakeApi>) {
 
 describe("TargetWorkspacePage", () => {
   it("identifies the active target, platform, source and ingestion state", async () => {
-    //const api = createFakeApi();
     const api = apiWithState(null);
-    //api.request.mockResolvedValue(TARGET);
     renderPage(api);
 
     expect(
@@ -173,16 +171,16 @@ describe("TargetWorkspacePage review collection", () => {
     });
   });
 
-  it("displays Partial success when ingestion finishes with zero usable reviews", async () => {
+  it("displays Succeeded when ingestion completes with zero usable reviews", async () => {
     const api = apiWithState(RESULT_EMPTY);
     renderPage(api);
 
     expect(
       await screen.findByTestId("ingestion-status-badge"),
-    ).toHaveTextContent("Partial success");
+    ).toHaveTextContent("Succeeded");
     expect(
       screen.getByText(
-        "Ingestion finished, but no usable reviews were added to the dataset.",
+        "Ingestion completed, but no usable reviews were added to the dataset.",
       ),
     ).toBeVisible();
   });
