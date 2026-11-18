@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
@@ -47,11 +46,7 @@ function describeAttempt(attempt: IngestionAttempt): string {
 }
 
 type DisplayIngestionStatus =
-  | "Not started"
-  | "Processing"
-  | "Succeeded"
-  | "Partial success"
-  | "Failed";
+  "Not started" | "Processing" | "Succeeded" | "Partial success" | "Failed";
 
 function getDisplayStatus(
   busy: boolean,
