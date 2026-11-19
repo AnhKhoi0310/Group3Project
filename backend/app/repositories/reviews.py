@@ -83,17 +83,27 @@ def list_reviews_for_target(session: Session, target_id: int) -> list[Review]:
     return list(session.scalars(query).all())
 
 
+def get_active_reviews_for_target(session: Session, target_id: int) -> list[Review]:
+    """Return the active persisted review dataset for an owned target.
+
+    Shared data boundary used by review listing, summary derivation, and Q&A.
+    """
+    return list_reviews_for_target(session, target_id)
+
+
 def summarize_reviews_for_target(session: Session, target_id: int) -> dict:
-    """Compute review count, average rating, and star counts from persisted rows."""
-    query = select(Review.rating).where(Review.target_id == target_id)
-    ratings = list(session.scalars(query).all())
+    """Compute review count, average rating, and star counts from active persisted rows."""
+    active_reviews = get_active_reviews_for_target(session, target_id)
+    ratings = [review.rating for review in active_reviews]
     review_count = len(ratings)
     distribution = {star: 0 for star in range(1, 6)}
     for rating in ratings:
         bucket = max(1, min(5, round(rating)))
         distribution[bucket] += 1
 
-    average_rating = round(sum(ratings) / review_count, 1) if review_count > 0 else None
+    average_rating = (
+        round(sum(ratings) / review_count, 1) if review_count > 0 else None
+    )
     return {
         "review_count": review_count,
         "average_rating": average_rating,
