@@ -203,3 +203,144 @@ def test_unauthenticated_target_summary_is_rejected(client, db):
 
     assert response.status_code == 401
     assert response.json()["code"] == "unauthenticated"
+
+
+def test_summary_updates_when_persisted_reviews_are_added_or_removed(client, db):
+    target = make_target(client, "token-a", "Dynamic cafe")
+    first = Review(
+        target_id=target["id"],
+        source_platform=PLATFORM_GOOGLE_MAPS,
+        rating=5.0,
+        text="Amazing coffee!",
+    )
+    second = Review(
+        target_id=target["id"],
+        source_platform=PLATFORM_GOOGLE_MAPS,
+        rating=3.0,
+        text="Average pastry.",
+    )
+    db.add_all([first, second])
+    db.commit()
+
+    initial = client.get(
+        f"/api/targets/{target['id']}/summary", headers=bearer("token-a")
+    )
+    assert initial.status_code == 200
+    assert initial.json()["review_count"] == 2
+    assert initial.json()["average_rating"] == 4.0
+
+    # Add a third persisted review -> count and average update dynamically.
+    third = Review(
+        target_id=target["id"],
+        source_platform=PLATFORM_GOOGLE_MAPS,
+        rating=1.0,
+        text="Cold espresso.",
+    )
+    db.add(third)
+    db.commit()
+
+    after_add = client.get(
+        f"/api/targets/{target['id']}/summary", headers=bearer("token-a")
+    )
+    assert after_add.status_code == 200
+    assert after_add.json()["review_count"] == 3
+    assert after_add.json()["average_rating"] == 3.0
+    assert after_add.json()["rating_distribution"] == {
+        "1": 1,
+        "2": 0,
+        "3": 1,
+        "4": 0,
+        "5": 1,
+    }
+
+    # Remove a persisted review -> summary reflects only remaining active rows.
+    db.delete(third)
+    db.commit()
+
+    after_remove = client.get(
+        f"/api/targets/{target['id']}/summary", headers=bearer("token-a")
+    )
+    assert after_remove.status_code == 200
+    assert after_remove.json()["review_count"] == 2
+    assert after_remove.json()["average_rating"] == 4.0
+    assert after_remove.json()["rating_distribution"] == {
+        "1": 0,
+        "2": 0,
+        "3": 1,
+        "4": 0,
+        "5": 1,
+    }
+
+
+def test_summaries_are_isolated_per_target_for_same_owner(client, db):
+    target_a = make_target(client, "token-a", "Target A Cafe")
+    target_b = make_target(client, "token-a", "Target B Bakery")
+    db.add_all(
+        [
+            Review(
+                target_id=target_a["id"],
+                source_platform=PLATFORM_GOOGLE_MAPS,
+                rating=5.0,
+                text="Best latte in town.",
+            ),
+            Review(
+                target_id=target_b["id"],
+                source_platform=PLATFORM_GOOGLE_MAPS,
+                rating=2.0,
+                text="Stale bread.",
+            ),
+            Review(
+                target_id=target_b["id"],
+                source_platform=PLATFORM_GOOGLE_MAPS,
+                rating=2.0,
+                text="Slow line.",
+            ),
+        ]
+    )
+    db.commit()
+
+    res_a = client.get(
+        f"/api/targets/{target_a['id']}/summary", headers=bearer("token-a")
+    )
+    res_b = client.get(
+        f"/api/targets/{target_b['id']}/summary", headers=bearer("token-a")
+    )
+
+    assert res_a.status_code == 200
+    assert res_a.json() == {
+        "target_id": target_a["id"],
+        "target_name": "Target A Cafe",
+        "review_count": 1,
+        "average_rating": 5.0,
+        "rating_distribution": {"1": 0, "2": 0, "3": 0, "4": 0, "5": 1},
+    }
+
+    assert res_b.status_code == 200
+    assert res_b.json() == {
+        "target_id": target_b["id"],
+        "target_name": "Target B Bakery",
+        "review_count": 2,
+        "average_rating": 2.0,
+        "rating_distribution": {"1": 0, "2": 2, "3": 0, "4": 0, "5": 0},
+    }
+
+
+def test_cross_user_summary_isolation_with_populated_reviews(client, db):
+    target_a = make_target(client, "token-a", "Secret Cafe")
+    db.add(
+        Review(
+            target_id=target_a["id"],
+            source_platform=PLATFORM_GOOGLE_MAPS,
+            rating=5.0,
+            text="Confidential review.",
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"/api/targets/{target_a['id']}/summary", headers=bearer("token-b")
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "target_not_found"
+    assert "Secret Cafe" not in response.text
