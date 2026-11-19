@@ -19,6 +19,10 @@ const RESULT_PARTIAL = {
   status: "succeeded",
   reviews_found: 12,
   reviews_skipped: 2,
+  skipped_reasons: {
+    missing_text: 1,
+    invalid_rating: 1,
+  },
 };
 
 const RESULT_SUCCEEDED = {
@@ -164,13 +168,37 @@ describe("TargetWorkspacePage review collection", () => {
     await openAndCollect(api);
 
     expect(await screen.findByText(/Found 12 reviews/)).toBeVisible();
-    expect(screen.getByText(/2 were skipped/)).toBeVisible();
+    expect(
+      screen.getByText(
+        /2 were skipped and excluded from the active dataset: 1 \(missing review text\), 1 \(invalid rating\)\./,
+      ),
+    ).toBeVisible();
     expect(screen.getByTestId("ingestion-status-badge")).toHaveTextContent(
       "Partial success",
     );
     expect(api.request).toHaveBeenCalledWith("/api/targets/1/ingestions", {
       method: "POST",
     });
+  });
+
+  it("reports malformed records, duplicate reviews, and singular skipped counts clearly", async () => {
+    const api = apiWithState({
+      target_id: 1,
+      status: "succeeded",
+      reviews_found: 1,
+      reviews_skipped: 3,
+      skipped_reasons: {
+        malformed_record: 1,
+        duplicate_record: 2,
+      },
+    });
+    renderPage(api);
+
+    expect(
+      await screen.findByText(
+        /Found 1 review\. 3 were skipped and excluded from the active dataset: 1 \(malformed source record\), 2 \(duplicate review\)\./,
+      ),
+    ).toBeVisible();
   });
 
   it("displays Partial success when ingestion finishes with zero usable reviews", async () => {
