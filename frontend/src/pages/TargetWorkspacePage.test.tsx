@@ -318,4 +318,115 @@ describe("TargetWorkspacePage review summary", () => {
     ).toBeVisible();
     expect(screen.queryByText(/secret-db/)).not.toBeInTheDocument();
   });
+
+
+  it("refreshes the summary from persisted backend data after ingestion completes", async () => {
+    let currentSummary = EMPTY_SUMMARY;
+    const api = createFakeApi();
+
+    api.request.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (init?.method === "POST" && path === "/api/targets/1/ingestions") {
+        currentSummary = POPULATED_SUMMARY;
+        return RESULT_SUCCEEDED;
+      }
+      if (path.endsWith("/ingestions/latest")) {
+        return null;
+      }
+      if (path.endsWith("/summary")) {
+        return currentSummary;
+      }
+      if (path.endsWith("/reviews")) {
+        return [];
+      }
+      return TARGET;
+    });
+
+    renderPage(api);
+
+    expect(await screen.findByTestId("summary-review-count")).toHaveTextContent(
+      "0",
+    );
+    expect(screen.getByTestId("summary-average-rating")).toHaveTextContent(
+      "No ratings yet",
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Collect reviews" }),
+    );
+
+    expect(await screen.findByTestId("summary-review-count")).toHaveTextContent(
+      "4",
+    );
+    expect(screen.getByTestId("summary-average-rating")).toHaveTextContent(
+      "4.3 / 5",
+    );
+  });
+
+  it("updates the summary cleanly when switching to a different active target", async () => {
+    const targetTwo = {
+      ...TARGET,
+      id: 2,
+      name: "Second Bakery",
+    };
+    const summaryTwo = {
+      target_id: 2,
+      target_name: "Second Bakery",
+      review_count: 1,
+      average_rating: 2.0,
+      rating_distribution: { "1": 0, "2": 1, "3": 0, "4": 0, "5": 0 },
+    };
+
+    const api = createFakeApi();
+    api.request.mockImplementation(async (path: string) => {
+      if (path === "/api/targets/1") return TARGET;
+      if (path === "/api/targets/1/summary") return POPULATED_SUMMARY;
+      if (path === "/api/targets/2") return targetTwo;
+      if (path === "/api/targets/2/summary") return summaryTwo;
+      if (path.endsWith("/ingestions/latest")) return null;
+      if (path.endsWith("/reviews")) return [];
+      return TARGET;
+    });
+
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/targets/1"]}>
+        <AuthProvider client={createFakeAuth(USER_A)} api={api}>
+          <Routes>
+            <Route
+              path="/targets/:targetId"
+              element={<TargetWorkspacePage />}
+            />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("summary-review-count")).toHaveTextContent(
+      "4",
+    );
+
+    rerender(
+      <MemoryRouter initialEntries={["/targets/2"]}>
+        <AuthProvider client={createFakeAuth(USER_A)} api={api}>
+          <Routes>
+            <Route
+              path="/targets/:targetId"
+              element={<TargetWorkspacePage />}
+            />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Review summary for Second Bakery",
+      }),
+    ).toBeVisible();
+    expect(await screen.findByTestId("summary-review-count")).toHaveTextContent(
+      "1",
+    );
+    expect(screen.getByTestId("summary-average-rating")).toHaveTextContent(
+      "2.0 / 5",
+    );
+  });
 });
