@@ -270,7 +270,9 @@ describe("TargetWorkspacePage review summary", () => {
         name: "Review summary for Example Cafe",
       }),
     ).toBeVisible();
-    expect(await screen.findByTestId("summary-review-count")).toHaveTextContent("4");
+    expect(await screen.findByTestId("summary-review-count")).toHaveTextContent(
+      "4",
+    );
     expect(screen.getByTestId("summary-average-rating")).toHaveTextContent(
       "4.3 / 5",
     );
@@ -320,7 +322,6 @@ describe("TargetWorkspacePage review summary", () => {
     expect(screen.queryByText(/secret-db/)).not.toBeInTheDocument();
   });
 
-
   it("refreshes the summary from persisted backend data after ingestion completes", async () => {
     let currentSummary: ReviewSummary = EMPTY_SUMMARY;
     const api = createFakeApi();
@@ -354,9 +355,7 @@ describe("TargetWorkspacePage review summary", () => {
     fireEvent.click(screen.getByRole("button", { name: "Collect reviews" }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("summary-review-count")).toHaveTextContent(
-        "4",
-      );
+      expect(screen.getByTestId("summary-review-count")).toHaveTextContent("4");
     });
     expect(screen.getByTestId("summary-average-rating")).toHaveTextContent(
       "4.3 / 5",
