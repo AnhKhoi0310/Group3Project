@@ -286,7 +286,7 @@ describe("TargetWorkspacePage review summary", () => {
         name: "Review summary for Example Cafe",
       }),
     ).toBeVisible();
-    expect(screen.getByTestId("summary-review-count")).toHaveTextContent("4");
+    expect(screen.findByTestId("summary-review-count")).toHaveTextContent("4");
     expect(screen.getByTestId("summary-average-rating")).toHaveTextContent(
       "4.3 / 5",
     );
