@@ -326,7 +326,7 @@ describe("TargetWorkspacePage review summary", () => {
     const api = createFakeApi();
 
     api.request.mockImplementation(async (path: string, init?: RequestInit) => {
-      if (init?.method === "POST" && path === "/api/targets/1/ingestions") {
+      if (init?.method === "POST") {
         currentSummary = POPULATED_SUMMARY;
         return RESULT_SUCCEEDED;
       }
@@ -389,7 +389,7 @@ describe("TargetWorkspacePage review summary", () => {
     });
 
     const { rerender } = render(
-      <MemoryRouter initialEntries={["/targets/1"]}>
+      <MemoryRouter key="/targets/1" initialEntries={["/targets/1"]}>
         <AuthProvider client={createFakeAuth(USER_A)} api={api}>
           <Routes>
             <Route
@@ -406,7 +406,7 @@ describe("TargetWorkspacePage review summary", () => {
     );
 
     rerender(
-      <MemoryRouter initialEntries={["/targets/2"]}>
+      <MemoryRouter key="/targets/2" initialEntries={["/targets/2"]}>
         <AuthProvider client={createFakeAuth(USER_A)} api={api}>
           <Routes>
             <Route
