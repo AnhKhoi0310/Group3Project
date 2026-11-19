@@ -35,14 +35,35 @@ function describeFailure(category: string | null | undefined): string {
   );
 }
 
+const SKIP_REASON_LABELS: Record<string, string> = {
+  missing_text: "missing review text",
+  invalid_rating: "invalid rating",
+  malformed_record: "malformed source record",
+  duplicate_record: "duplicate review",
+};
+
+function formatSkippedReasons(
+  reasons: Record<string, number> | undefined,
+): string {
+  if (!reasons) return "";
+  const parts = Object.entries(reasons)
+    .filter(([, count]) => count > 0)
+    .map(
+      ([reason, count]) =>
+        `${count} (${SKIP_REASON_LABELS[reason] ?? reason.replace(/_/g, " ")})`,
+    );
+  return parts.length > 0 ? `: ${parts.join(", ")}` : "";
+}
+
 function describeAttempt(attempt: IngestionAttempt): string {
   const found = `Found ${attempt.reviews_found} ${
     attempt.reviews_found === 1 ? "review" : "reviews"
   }.`;
   if (attempt.reviews_skipped === 0) return found;
+  const breakdown = formatSkippedReasons(attempt.skipped_reasons);
   return `${found} ${attempt.reviews_skipped} ${
     attempt.reviews_skipped === 1 ? "was" : "were"
-  } skipped because they had no text or rating.`;
+  } skipped and excluded from the active dataset${breakdown}.`;
 }
 
 type DisplayIngestionStatus =
