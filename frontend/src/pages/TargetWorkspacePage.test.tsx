@@ -18,6 +18,10 @@ const RESULT_PARTIAL = {
   status: "succeeded",
   reviews_found: 12,
   reviews_skipped: 2,
+  skipped_reasons: {
+    missing_text: 1,
+    invalid_rating: 1,
+  },
 };
 
 const RESULT_SUCCEEDED = {
@@ -63,45 +67,34 @@ function renderPage(api = createFakeApi(), state?: { created: boolean }) {
   return api;
 }
 
-/**
- * GET target returns TARGET.
- * GET summary returns summary.
- * GET latest ingestion returns latestAttempt.
- * POST runs ingestion.
- */
+/** GET target returns TARGET; GET latest ingestion returns latestAttempt; GET summary returns summary; POST runs ingest */
 function apiWithState(
-  summary: unknown = EMPTY_SUMMARY,
   latestAttempt: unknown = null,
   ingest?: () => Promise<unknown>,
+  summary: unknown = EMPTY_SUMMARY,
 ) {
   const api = createFakeApi();
-
   api.request.mockImplementation(async (path: string, init?: RequestInit) => {
     if (init?.method === "POST") {
       return ingest ? ingest() : RESULT_SUCCEEDED;
     }
-
     if (path.endsWith("/ingestions/latest")) {
       return latestAttempt;
     }
-
     if (path.endsWith("/summary")) {
       return summary;
     }
-
     if (path.endsWith("/reviews")) {
       return [];
     }
-
     return TARGET;
   });
-
   return api;
 }
 
 /** GET returns the target; POST (ingestion) runs the given behavior. */
 function apiWithIngestion(ingest: () => Promise<unknown>) {
-  return apiWithState(EMPTY_SUMMARY, null, ingest);
+  return apiWithState(null, ingest);
 }
 
 async function openAndCollect(api: ReturnType<typeof createFakeApi>) {
@@ -113,7 +106,7 @@ async function openAndCollect(api: ReturnType<typeof createFakeApi>) {
 
 describe("TargetWorkspacePage", () => {
   it("identifies the active target, platform, source and ingestion state", async () => {
-    const api = apiWithState();
+    const api = apiWithState(null);
     renderPage(api);
 
     expect(
@@ -129,7 +122,7 @@ describe("TargetWorkspacePage", () => {
   });
 
   it("shows a confirmation after a target was just created", async () => {
-    const api = apiWithState();
+    const api = apiWithState(null);
     renderPage(api, { created: true });
 
     expect(await screen.findByText(/Target created/)).toBeVisible();
@@ -137,7 +130,7 @@ describe("TargetWorkspacePage", () => {
   });
 
   it("shows no confirmation when opened normally", async () => {
-    const api = apiWithState();
+    const api = apiWithState(null);
     renderPage(api);
 
     await screen.findByRole("heading", { name: "Example Cafe" });
@@ -193,7 +186,11 @@ describe("TargetWorkspacePage review collection", () => {
     await openAndCollect(api);
 
     expect(await screen.findByText(/Found 12 reviews/)).toBeVisible();
-    expect(screen.getByText(/2 were skipped/)).toBeVisible();
+    expect(
+      screen.getByText(
+        /2 were skipped and excluded from the active dataset: 1 \(missing review text\), 1 \(invalid rating\)\./,
+      ),
+    ).toBeVisible();
     expect(screen.getByTestId("ingestion-status-badge")).toHaveTextContent(
       "Partial success",
     );
@@ -202,16 +199,36 @@ describe("TargetWorkspacePage review collection", () => {
     });
   });
 
-  it("displays Succeeded when ingestion completes with zero usable reviews", async () => {
-    const api = apiWithState(EMPTY_SUMMARY, RESULT_EMPTY);
+  it("reports malformed records, duplicate reviews, and singular skipped counts clearly", async () => {
+    const api = apiWithState({
+      target_id: 1,
+      status: "succeeded",
+      reviews_found: 1,
+      reviews_skipped: 3,
+      skipped_reasons: {
+        malformed_record: 1,
+        duplicate_record: 2,
+      },
+    });
+    renderPage(api);
+
+    expect(
+      await screen.findByText(
+        /Found 1 review\. 3 were skipped and excluded from the active dataset: 1 \(malformed source record\), 2 \(duplicate review\)\./,
+      ),
+    ).toBeVisible();
+  });
+
+  it("displays Partial success when ingestion finishes with zero usable reviews", async () => {
+    const api = apiWithState(RESULT_EMPTY);
     renderPage(api);
 
     expect(
       await screen.findByTestId("ingestion-status-badge"),
-    ).toHaveTextContent("Succeeded");
+    ).toHaveTextContent("Partial success");
     expect(
       screen.getByText(
-        "Ingestion completed, but no usable reviews were added to the dataset.",
+        "Ingestion finished, but no usable reviews were added to the dataset.",
       ),
     ).toBeVisible();
   });
@@ -261,7 +278,7 @@ describe("TargetWorkspacePage review collection", () => {
 
 describe("TargetWorkspacePage review summary", () => {
   it("displays the review count, average rating, and rating distribution for the active target", async () => {
-    const api = apiWithState(POPULATED_SUMMARY);
+    const api = apiWithState(RESULT_SUCCEEDED, undefined, POPULATED_SUMMARY);
     renderPage(api);
 
     expect(
@@ -269,7 +286,9 @@ describe("TargetWorkspacePage review summary", () => {
         name: "Review summary for Example Cafe",
       }),
     ).toBeVisible();
-    expect(screen.getByTestId("summary-review-count")).toHaveTextContent("4");
+    expect(await screen.findByTestId("summary-review-count")).toHaveTextContent(
+      "4",
+    );
     expect(screen.getByTestId("summary-average-rating")).toHaveTextContent(
       "4.3 / 5",
     );
@@ -279,7 +298,7 @@ describe("TargetWorkspacePage review summary", () => {
   });
 
   it("shows zero reviews and no ratings yet when no reviews have been ingested", async () => {
-    const api = apiWithState(EMPTY_SUMMARY);
+    const api = apiWithState(null, undefined, EMPTY_SUMMARY);
     renderPage(api);
 
     expect(await screen.findByTestId("summary-review-count")).toHaveTextContent(
@@ -292,23 +311,18 @@ describe("TargetWorkspacePage review summary", () => {
 
   it("shows a safe error message if the review summary fails to load", async () => {
     const api = createFakeApi();
-
     api.request.mockImplementation(async (path: string) => {
       if (path.endsWith("/summary")) {
         throw new Error("DB connection failed: secret-db");
       }
-
       if (path.endsWith("/ingestions/latest")) {
         return null;
       }
-
       if (path.endsWith("/reviews")) {
         return [];
       }
-
       return TARGET;
     });
-
     renderPage(api);
 
     expect(

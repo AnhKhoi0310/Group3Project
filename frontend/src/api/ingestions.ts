@@ -6,6 +6,7 @@ export interface IngestionAttempt {
   status: "processing" | "succeeded" | "failed";
   reviews_found: number;
   reviews_skipped: number;
+  skipped_reasons?: Record<string, number>;
   failure_category: string | null;
   started_at: string;
   completed_at: string | null;
