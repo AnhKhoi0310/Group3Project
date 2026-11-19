@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ApiError } from "../api/client";
+import type { ReviewSummary } from "../api/reviews";
 import { AuthProvider } from "../auth/AuthContext";
 import { createFakeApi, createFakeAuth, USER_A } from "../test/fakeAuth";
 import TargetWorkspacePage from "./TargetWorkspacePage";
@@ -321,7 +322,7 @@ describe("TargetWorkspacePage review summary", () => {
 
 
   it("refreshes the summary from persisted backend data after ingestion completes", async () => {
-    let currentSummary = EMPTY_SUMMARY;
+    let currentSummary: ReviewSummary = EMPTY_SUMMARY;
     const api = createFakeApi();
 
     api.request.mockImplementation(async (path: string, init?: RequestInit) => {
