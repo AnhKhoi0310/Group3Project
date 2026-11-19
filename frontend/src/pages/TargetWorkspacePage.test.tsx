@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ApiError } from "../api/client";
 import type { ReviewSummary } from "../api/reviews";
@@ -270,7 +270,7 @@ describe("TargetWorkspacePage review summary", () => {
         name: "Review summary for Example Cafe",
       }),
     ).toBeVisible();
-    expect(screen.getByTestId("summary-review-count")).toHaveTextContent("4");
+    expect(await screen.findByTestId("summary-review-count")).toHaveTextContent("4");
     expect(screen.getByTestId("summary-average-rating")).toHaveTextContent(
       "4.3 / 5",
     );
@@ -351,13 +351,13 @@ describe("TargetWorkspacePage review summary", () => {
       "No ratings yet",
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Collect reviews" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Collect reviews" }));
 
-    expect(await screen.findByTestId("summary-review-count")).toHaveTextContent(
-      "4",
-    );
+    await waitFor(() => {
+      expect(screen.getByTestId("summary-review-count")).toHaveTextContent(
+        "4",
+      );
+    });
     expect(screen.getByTestId("summary-average-rating")).toHaveTextContent(
       "4.3 / 5",
     );
