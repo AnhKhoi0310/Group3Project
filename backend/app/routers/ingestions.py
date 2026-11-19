@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -70,6 +70,7 @@ class IngestionRead(BaseModel):
     status: str
     reviews_found: int
     reviews_skipped: int
+    skipped_reasons: dict[str, int] = Field(default_factory=dict)
     failure_category: str | None
     started_at: datetime
     completed_at: datetime | None
@@ -122,13 +123,17 @@ def _record_failure(
         )
 
 
-def _attempt_response(attempt: IngestionAttempt) -> IngestionRead:
+def _attempt_response(
+    attempt: IngestionAttempt,
+    skipped_reasons: dict[str, int] | None = None,
+) -> IngestionRead:
     return IngestionRead(
         attempt_id=attempt.id,
         target_id=attempt.target_id,
         status=attempt.status,
         reviews_found=attempt.reviews_found,
         reviews_skipped=attempt.reviews_skipped,
+        skipped_reasons=skipped_reasons or {},
         failure_category=attempt.failure_category,
         started_at=attempt.started_at,
         completed_at=attempt.completed_at,
@@ -228,7 +233,7 @@ def start_ingestion(
             INGESTION_ERRORS["persistence_error"][1],
         ) from None
 
-    return _attempt_response(completed)
+    return _attempt_response(completed, outcome.skipped_reasons)
 
 
 @router.get(
