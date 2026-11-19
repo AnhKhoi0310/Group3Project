@@ -68,11 +68,7 @@ function describeAttempt(attempt: IngestionAttempt): string {
 }
 
 type DisplayIngestionStatus =
-  | "Not started"
-  | "Processing"
-  | "Succeeded"
-  | "Partial success"
-  | "Failed";
+  "Not started" | "Processing" | "Succeeded" | "Partial success" | "Failed";
 
 function getDisplayStatus(
   busy: boolean,
@@ -87,7 +83,7 @@ function getDisplayStatus(
   if (attempt.status === "failed") {
     return "Failed";
   }
-  if (attempt.reviews_skipped > 0) {
+  if (attempt.reviews_skipped > 0 || attempt.reviews_found === 0) {
     return "Partial success";
   }
   return "Succeeded";

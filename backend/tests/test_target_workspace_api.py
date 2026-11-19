@@ -9,7 +9,7 @@ from app.adapters.identity import InvalidTokenError, VerifiedIdentity
 from app.auth import get_token_verifier
 from app.db import get_session
 from app.main import app
-from app.models import PLATFORM_GOOGLE_MAPS, AnalysisTarget
+from app.models import PLATFORM_GOOGLE_MAPS, AnalysisTarget, Review
 from app.routers import targets as targets_router
 
 USER_A = VerifiedIdentity(uid="uid-a", email="a@example.com")
@@ -120,3 +120,86 @@ def test_open_database_failure_returns_a_safe_error(client, db, monkeypatch):
     assert response.json()["code"] == "unexpected"
     assert "secret-sql" not in response.text
     assert "db host down" not in response.text
+
+
+def test_owner_can_get_review_summary_from_persisted_reviews(client, db):
+    target = make_target(client, "token-a", "A cafe")
+    db.add_all(
+        [
+            Review(
+                target_id=target["id"],
+                source_platform=PLATFORM_GOOGLE_MAPS,
+                rating=5.0,
+                text="Great espresso!",
+            ),
+            Review(
+                target_id=target["id"],
+                source_platform=PLATFORM_GOOGLE_MAPS,
+                rating=4.0,
+                text="Friendly staff.",
+            ),
+            Review(
+                target_id=target["id"],
+                source_platform=PLATFORM_GOOGLE_MAPS,
+                rating=3.0,
+                text="Good but slow.",
+            ),
+        ]
+    )
+    db.commit()
+
+    response = client.get(
+        f"/api/targets/{target['id']}/summary", headers=bearer("token-a")
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["target_id"] == target["id"]
+    assert body["target_name"] == "A cafe"
+    assert body["review_count"] == 3
+    assert body["average_rating"] == 4.0
+    assert body["rating_distribution"] == {
+        "1": 0,
+        "2": 0,
+        "3": 1,
+        "4": 1,
+        "5": 1,
+    }
+
+
+def test_empty_target_summary_returns_zero_count_and_null_average(client, db):
+    target = make_target(client, "token-a", "Empty cafe")
+
+    response = client.get(
+        f"/api/targets/{target['id']}/summary", headers=bearer("token-a")
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "target_id": target["id"],
+        "target_name": "Empty cafe",
+        "review_count": 0,
+        "average_rating": None,
+        "rating_distribution": {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0},
+    }
+
+
+def test_another_users_target_summary_is_denied(client, db):
+    target = make_target(client, "token-a", "A cafe")
+
+    response = client.get(
+        f"/api/targets/{target['id']}/summary", headers=bearer("token-b")
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "target_not_found"
+    assert "A cafe" not in response.text
+
+
+def test_unauthenticated_target_summary_is_rejected(client, db):
+    target = make_target(client, "token-a", "A cafe")
+
+    response = client.get(f"/api/targets/{target['id']}/summary")
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "unauthenticated"
