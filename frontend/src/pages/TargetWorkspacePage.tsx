@@ -12,6 +12,7 @@ import Button from "../components/Button";
 import ErrorMessage from "../components/ErrorMessage";
 import LoadingIndicator from "../components/LoadingIndicator";
 import ReviewList from "../components/ReviewList";
+import ReviewSummaryCard from "../components/ReviewSummaryCard";
 
 const PLATFORM_LABELS: Record<string, string> = { google_maps: "Google Maps" };
 const UNEXPECTED = "Something went wrong on our side. Please try again.";
@@ -67,7 +68,11 @@ function describeAttempt(attempt: IngestionAttempt): string {
 }
 
 type DisplayIngestionStatus =
-  "Not started" | "Processing" | "Succeeded" | "Partial success" | "Failed";
+  | "Not started"
+  | "Processing"
+  | "Succeeded"
+  | "Partial success"
+  | "Failed";
 
 function getDisplayStatus(
   busy: boolean,
@@ -82,7 +87,7 @@ function getDisplayStatus(
   if (attempt.status === "failed") {
     return "Failed";
   }
-  if (attempt.reviews_skipped > 0 || attempt.reviews_found === 0) {
+  if (attempt.reviews_skipped > 0) {
     return "Partial success";
   }
   return "Succeeded";
@@ -111,7 +116,9 @@ function describeDatasetReadiness(
     case "Processing":
       return "Ingestion is currently running. Analysis will be ready once collection finishes.";
     case "Succeeded":
-      return "Dataset is ready for analysis.";
+      return attempt && attempt.reviews_found === 0
+        ? "Ingestion completed, but no usable reviews were added to the dataset."
+        : "Dataset is ready for analysis.";
     case "Partial success":
       return attempt && attempt.reviews_found > 0
         ? "Dataset is ready for analysis, though some source records were skipped."
@@ -206,14 +213,6 @@ export default function TargetWorkspacePage() {
 
   if (!target) return <LoadingIndicator />;
 
-  /*const statusLabel = busy
-   ? "Processing"
-    : attempt?.status === "succeeded"
-      ? "Reviews found"
-      : attempt?.status === "failed"
-        ? "Failed"
-        : "Not started";*/
-
   const displayStatus = getDisplayStatus(busy, attempt);
   const isProcessing = busy || attempt?.status === "processing";
 
@@ -277,6 +276,12 @@ export default function TargetWorkspacePage() {
           </p>
         )}
       </section>
+      <ReviewSummaryCard
+        api={api}
+        targetId={String(target.id)}
+        targetName={target.name}
+        refreshKey={reviewsVersion}
+      />
       <ReviewList
         api={api}
         targetId={String(target.id)}
