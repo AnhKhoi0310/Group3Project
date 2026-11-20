@@ -6,6 +6,7 @@ from app.services.normalizer import (
     ReviewNormalizationError,
     normalize_review,
     normalize_reviews,
+    normalize_reviews_detailed,
     normalize_reviews_with_skips,
 )
 
@@ -327,3 +328,46 @@ def test_normalize_review_rejects_non_string_place_id(place_id):
         match="A business identifier is required",
     ):
         normalize_review({"rating": 5}, place_id)
+
+
+def test_normalize_reviews_detailed_categorizes_skipped_records():
+    """Group skipped records by concise reason category."""
+    raw_reviews = [
+        {"review_id": "r1", "rating": 5, "snippet": "Great espresso!"},
+        "not-a-dict",
+        {"review_id": "r2", "rating": 9, "snippet": "Rating out of range"},
+        {"review_id": "r3", "snippet": "Missing rating"},
+        {"review_id": "r4", "rating": 4, "snippet": "   "},
+        {"review_id": "r1", "rating": 2, "snippet": "Duplicate ID"},
+    ]
+
+    results, skipped, reasons = normalize_reviews_detailed(
+        raw_reviews,
+        "place-123",
+    )
+
+    assert [review["review_id"] for review in results] == ["r1"]
+    assert skipped == 5
+    assert reasons == {
+        "malformed_record": 1,
+        "invalid_rating": 2,
+        "missing_text": 1,
+        "duplicate_record": 1,
+    }
+
+
+def test_normalize_reviews_detailed_returns_empty_reasons_when_all_valid():
+    """A batch with no skipped records returns an empty reasons mapping."""
+    raw_reviews = [
+        {"review_id": "r1", "rating": 5, "snippet": "Great!"},
+        {"review_id": "r2", "rating": 4, "snippet": "Good!"},
+    ]
+
+    results, skipped, reasons = normalize_reviews_detailed(
+        raw_reviews,
+        "place-123",
+    )
+
+    assert len(results) == 2
+    assert skipped == 0
+    assert reasons == {}

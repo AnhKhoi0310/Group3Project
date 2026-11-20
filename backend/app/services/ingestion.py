@@ -1,7 +1,7 @@
 """Collect and normalize reviews for one analysis target."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.adapters.review_source import (
     ReviewSourceError,
@@ -9,7 +9,7 @@ from app.adapters.review_source import (
 )
 from app.services.normalizer import (
     ReviewNormalizationError,
-    normalize_reviews_with_skips,
+    normalize_reviews_detailed,
 )
 
 
@@ -18,6 +18,7 @@ class IngestionOutcome:
     reviews: list[dict]
     reviews_found: int
     reviews_skipped: int
+    skipped_reasons: dict[str, int] = field(default_factory=dict)
 
 
 class IngestionError(Exception):
@@ -50,7 +51,7 @@ def collect_reviews(
         raise IngestionError("unexpected") from exc
 
     try:
-        reviews, skipped = normalize_reviews_with_skips(
+        reviews, skipped, skipped_reasons = normalize_reviews_detailed(
             raw_reviews,
             business_id,
         )
@@ -66,4 +67,5 @@ def collect_reviews(
         reviews=reviews,
         reviews_found=len(reviews),
         reviews_skipped=skipped,
+        skipped_reasons=skipped_reasons,
     )

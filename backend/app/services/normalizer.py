@@ -57,14 +57,13 @@ def normalize_review(raw_review: dict, place_id: str) -> dict:
     }
 
 
-def normalize_reviews_with_skips(
+def normalize_reviews_detailed(
     raw_reviews: list,
     place_id: str,
-) -> tuple[list[dict], int]:
-    """Normalize a batch, skipping malformed, incomplete, and duplicate records.
+) -> tuple[list[dict], int, dict[str, int]]:
+    """Normalize a batch, counting skipped records and grouping them by reason.
 
     A usable canonical review must have non-empty text and a rating from 1 to 5.
-    The returned integer counts every skipped record.
     """
     if not isinstance(raw_reviews, list):
         raise ReviewNormalizationError("Reviews must be a list.")
@@ -75,28 +74,58 @@ def normalize_reviews_with_skips(
     normalized_reviews = []
     seen_review_ids = set()
     skipped = 0
+    skipped_reasons: dict[str, int] = {}
+
+    def record_skip(reason: str) -> None:
+        nonlocal skipped
+        skipped += 1
+        skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
 
     for raw_review in raw_reviews:
+        if not isinstance(raw_review, dict):
+            record_skip("malformed_record")
+            continue
+
         try:
             normalized = normalize_review(raw_review, place_id)
         except ReviewNormalizationError:
-            skipped += 1
+            record_skip("invalid_rating")
             continue
 
-        if not normalized["text"] or normalized["rating"] is None:
-            skipped += 1
+        if normalized["rating"] is None:
+            record_skip("invalid_rating")
+            continue
+
+        if not normalized["text"]:
+            record_skip("missing_text")
             continue
 
         review_id = normalized["review_id"]
         if review_id is not None:
             if review_id in seen_review_ids:
-                skipped += 1
+                record_skip("duplicate_record")
                 continue
             seen_review_ids.add(review_id)
 
         normalized_reviews.append(normalized)
 
-    return normalized_reviews, skipped
+    return normalized_reviews, skipped, skipped_reasons
+
+
+def normalize_reviews_with_skips(
+    raw_reviews: list,
+    place_id: str,
+) -> tuple[list[dict], int]:
+    """Normalize a batch, skipping malformed, incomplete, and duplicate records.
+
+    A usable canonical review must have non-empty text and a rating from 1 to 5.
+    The returned integer counts every skipped record.
+    """
+    normalized, skipped, _reasons = normalize_reviews_detailed(
+        raw_reviews,
+        place_id,
+    )
+    return normalized, skipped
 
 
 def normalize_reviews(raw_reviews: list, place_id: str) -> list[dict]:
