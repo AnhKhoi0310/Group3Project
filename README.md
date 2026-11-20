@@ -76,6 +76,8 @@ Without `TEST_DATABASE_URL`, the MySQL tests are skipped locally. CI always runs
 TEST_DATABASE_URL=mysql+pymysql://user:password@127.0.0.1:3306/reviewlens_test pytest
 ```
 
+Coverage gate, integration tests, the fake model and the evaluation set: see [docs/testing.md](docs/testing.md). Review Q&A design: [docs/review-qa.md](docs/review-qa.md).
+
 ## Pull requests
 
 Work on a feature branch and reference the story ID (for example, S1-015). Every PR needs a short Test Evidence section. Failing checks block merge to `main`.
