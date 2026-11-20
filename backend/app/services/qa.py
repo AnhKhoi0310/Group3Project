@@ -1,13 +1,20 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import IngestionAttempt
-from app.repositories.reviews import list_reviews_for_target
+from app.adapters.llm import DISPOSITIONS, LLMError
+from app.models import IngestionAttempt, Review
+from app.repositories.reviews import get_active_reviews_for_target
 from app.repositories.targets import get_target_for_owner
+
+# Upper bound on reviews sent with one question. Reviews are short, so 200 is
+# roughly 30,000 input tokens: far inside the model's context window, and
+# above what the demo datasets hold. When a target has more, the most recent
+# reviews are used and the response reports both numbers (see docs/review-qa.md).
+MAX_CONTEXT_REVIEWS = 200
 
 
 class LLMClient(Protocol):
@@ -24,17 +31,29 @@ class TargetNotFoundError(Exception):
 
 @dataclass(frozen=True)
 class QAResult:
-    """Result returned by the Q&A orchestration service."""
+    """Result returned by the Q&A orchestration service.
+
+    ``status`` is ``answered``, ``insufficient_evidence`` or ``declined``.
+    ``evidence`` holds only reviews that were supplied for this question.
+    """
 
     status: str
     answer: str
     target_id: int
     reviews_used: int
+    target_name: str = ""
+    reviews_total: int = 0
+    evidence: tuple[Review, ...] = field(default=())
 
 
 INSUFFICIENT_EVIDENCE_ANSWER = (
     "There are not enough successfully ingested reviews for this target "
     "to answer questions."
+)
+
+MODEL_REFUSAL_ANSWER = (
+    "ReviewLens can't help with that request. Try asking about what customers "
+    "say in this target's reviews."
 )
 
 
@@ -80,6 +99,10 @@ You must follow these rules:
    or other evidence.
 5. When the supplied reviews do not contain enough evidence to answer
    reliably, clearly say that there is insufficient evidence.
+   Distinguish information supported by the reviews from information
+   absent from the reviews. If only part of a question is covered, answer
+   the supported part and say plainly which part the reviews do not
+   address. Never fill the gap with general knowledge or likely guesses.
 6. Decline questions unrelated to the active AnalysisTarget or its
    supplied reviews. Make the refusal clear and useful.
    For unrelated general-knowledge questions, politely explain that
@@ -91,6 +114,16 @@ You must follow these rules:
 8. Do not imply that you analyzed reviews that were not supplied in
    the current request.
 9. Keep answers concise and distinguish evidence from uncertainty.
+   When it helps, mention how many reviews support a point.
+10. Report the result in the required JSON format:
+   - "disposition": "answered" when the supplied reviews support the
+     answer; "insufficient_evidence" when the question is about this
+     target but the reviews do not contain the information needed;
+     "declined" when the question is outside ReviewLens's scope.
+   - "answer": the text shown to the user.
+   - "evidence_review_ids": the review_id values of the supplied reviews
+     the answer relies on. Use only review_id values from this request.
+     Use an empty list when declining or when no review supports an answer.
 
 The supplied review context is the complete evidence available to you
 for this request. Do not assume that other reviews or previous
@@ -120,6 +153,41 @@ def _build_user_prompt(question: str, reviews: list) -> str:
     )
 
 
+def _parse_model_reply(
+    raw: str, supplied: list[Review]
+) -> tuple[str, str, tuple[Review, ...]]:
+    """Turn the model reply into (status, answer, evidence).
+
+    Cited review IDs are kept only if that review was supplied with this
+    question, so an answer can never point at another target's or user's data.
+    A reply that is not the structured format is shown as a plain answer.
+    """
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return "answered", raw, ()
+    if not isinstance(data, dict) or data.get("disposition") not in DISPOSITIONS:
+        return "answered", raw, ()
+
+    answer = data.get("answer")
+    if not isinstance(answer, str) or not answer.strip():
+        return "answered", raw, ()
+
+    by_id = {review.id: review for review in supplied}
+    cited = data.get("evidence_review_ids")
+    evidence: list[Review] = []
+    if isinstance(cited, list):
+        for review_id in cited:
+            review = by_id.get(review_id) if isinstance(review_id, int) else None
+            if review is not None and review not in evidence:
+                evidence.append(review)
+
+    status = data["disposition"]
+    if status == "declined":
+        evidence = []
+    return status, answer.strip(), tuple(evidence)
+
+
 def answer_question(
     session: Session,
     owner_id: int,
@@ -132,7 +200,8 @@ def answer_question(
 
     Ownership is verified before reviews are retrieved. Every invocation
     builds fresh context from the requested target; no prior target context
-    is cached or reused.
+    is cached or reused. Reviews come from the same function the ingestion
+    summary uses, so both describe the same dataset (S2-008).
     """
     if not question or not question.strip():
         raise ValueError("A question is required.")
@@ -148,7 +217,7 @@ def answer_question(
             "The target does not exist or is not owned by this user."
         )
 
-    reviews = list_reviews_for_target(session, target.id)
+    reviews = get_active_reviews_for_target(session, target.id)
 
     if not reviews or not _has_successful_ingestion(session, target.id):
         return QAResult(
@@ -156,7 +225,12 @@ def answer_question(
             answer=INSUFFICIENT_EVIDENCE_ANSWER,
             target_id=target.id,
             reviews_used=0,
+            target_name=target.name,
+            reviews_total=len(reviews),
         )
+
+    # The list is newest first, so this keeps the most recent reviews.
+    context = reviews[:MAX_CONTEXT_REVIEWS]
 
     system_prompt = _build_system_prompt(
         target_name=target.name,
@@ -164,17 +238,27 @@ def answer_question(
     )
     user_prompt = _build_user_prompt(
         question=question,
-        reviews=reviews,
+        reviews=context,
     )
 
-    answer = llm.generate(
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
-    )
+    try:
+        raw = llm.generate(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )
+    except LLMError as exc:
+        if exc.category != "refused":
+            raise
+        status, answer, evidence = "declined", MODEL_REFUSAL_ANSWER, ()
+    else:
+        status, answer, evidence = _parse_model_reply(raw, context)
 
     return QAResult(
-        status="answered",
+        status=status,
         answer=answer,
         target_id=target.id,
-        reviews_used=len(reviews),
+        reviews_used=len(context),
+        target_name=target.name,
+        reviews_total=len(reviews),
+        evidence=evidence,
     )

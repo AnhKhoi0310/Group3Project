@@ -98,7 +98,7 @@ def test_other_entity_question_sends_active_target_to_model():
             return_value=target,
         ),
         patch(
-            "app.services.qa.list_reviews_for_target",
+            "app.services.qa.get_active_reviews_for_target",
             return_value=[review],
         ),
         patch(
@@ -144,7 +144,7 @@ def test_other_platform_question_sends_platform_to_model():
             return_value=target,
         ),
         patch(
-            "app.services.qa.list_reviews_for_target",
+            "app.services.qa.get_active_reviews_for_target",
             return_value=[review],
         ),
         patch(

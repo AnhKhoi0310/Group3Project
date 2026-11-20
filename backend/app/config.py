@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     firebase_credentials_path: str = Field(min_length=1)
     review_provider_api_key: SecretStr = Field(min_length=1)
     ingestion_max_reviews: int = Field(default=50, gt=0)
+    # Optional, so the rest of the app runs without it; Q&A then returns 503.
+    anthropic_api_key: SecretStr | None = None
+    llm_model: str = Field(default="claude-sonnet-5-5", min_length=1)
 
     @property
     def firebase_credentials_file(self) -> Path:

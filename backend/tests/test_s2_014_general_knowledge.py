@@ -91,7 +91,7 @@ def test_general_knowledge_question_receives_scope_instructions():
             return_value=target,
         ) as get_target,
         patch(
-            "app.services.qa.list_reviews_for_target",
+            "app.services.qa.get_active_reviews_for_target",
             return_value=[review],
         ),
         patch(

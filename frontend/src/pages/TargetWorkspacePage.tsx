@@ -11,6 +11,7 @@ import { useAuth } from "../auth/AuthContext";
 import Button from "../components/Button";
 import ErrorMessage from "../components/ErrorMessage";
 import LoadingIndicator from "../components/LoadingIndicator";
+import QuestionPanel from "../components/QuestionPanel";
 import ReviewList from "../components/ReviewList";
 import ReviewSummaryCard from "../components/ReviewSummaryCard";
 
@@ -277,6 +278,12 @@ export default function TargetWorkspacePage() {
         targetId={String(target.id)}
         targetName={target.name}
         refreshKey={reviewsVersion}
+      />
+      <QuestionPanel
+        key={target.id}
+        api={api}
+        targetId={String(target.id)}
+        targetName={target.name}
       />
       <ReviewList
         api={api}
