@@ -52,7 +52,8 @@ def fetcher():
 
 
 @pytest.fixture
-def client(session_factory, fetcher, monkeypatch):
+def client(db, session_factory, fetcher, monkeypatch):
+    # db clears all user-scoped tables first, so each test starts empty.
     def session_override():
         with session_factory() as session:
             yield session
@@ -92,12 +93,6 @@ def client(session_factory, fetcher, monkeypatch):
     finally:
         app.dependency_overrides.clear()
         app.dependency_overrides.update(previous_overrides)
-
-
-@pytest.fixture(autouse=True)
-def clear_database(db):
-    # The shared db fixture clears all user-scoped test tables for each test.
-    yield
 
 
 def headers(token="token-a"):

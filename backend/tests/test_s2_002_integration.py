@@ -1,6 +1,28 @@
-"""Integration tests for persisted reviews and target isolation."""
+"""Integration tests across ingestion, persistence, summary and Q&A (S2-002).
 
+Each test drives the real API with only the two external services faked: the
+review provider (``fetcher``) and the model (``llm``). Everything between them
+(normalizing, saving, ownership checks, summary maths, context building) is
+the production code.
+"""
+
+import pytest
 import test_s1_022_s1_023 as s1_helpers
+from fake_llm import FakeLLM, structured_reply
+
+from app.adapters.review_source import ReviewSourceError
+from app.main import app
+from app.routers.questions import get_llm_client
+
+PROVIDER_RECORDS = [
+    {"review_id": "r1", "rating": 5, "snippet": "Battery life is superb."},
+    {"review_id": "r2", "rating": 4, "snippet": "Battery lasts two days."},
+    {"review_id": "r3", "rating": 4, "snippet": "Solid build, decent battery."},
+    {"review_id": "r4", "rating": 2, "snippet": "Battery died within a year."},
+    {"review_id": "r5", "snippet": "No rating was given here."},
+    {"review_id": "r6", "rating": 3},
+]
+VALID_TEXTS = [record["snippet"] for record in PROVIDER_RECORDS[:4]]
 
 
 def test_persisted_reviews_can_be_retrieved(client, fetcher):
@@ -107,3 +129,116 @@ def test_switching_targets_returns_different_reviews(client, fetcher):
     assert [r["text"] for r in reviews_a] == ["Review for A"]
     assert [r["text"] for r in reviews_b] == ["Review for B"]
     assert reviews_a_again == reviews_a
+
+
+@pytest.fixture
+def llm(client):
+    """Replace the model for one test; the client fixture restores overrides."""
+    fake = FakeLLM(response=structured_reply(answer="From the reviews."))
+    app.dependency_overrides[get_llm_client] = lambda: fake
+    return fake
+
+
+def summary_for(client, target_id, token="token-a"):
+    return client.get(
+        f"/api/targets/{target_id}/summary", headers=s1_helpers.headers(token)
+    )
+
+
+def ask(client, target_id, token="token-a"):
+    return client.post(
+        f"/api/targets/{target_id}/questions",
+        json={"question": "What do customers say about the battery?"},
+        headers=s1_helpers.headers(token),
+    )
+
+
+def ingest(client, fetcher, target_id, records):
+    fetcher.reviews = records
+    response = s1_helpers.start(client, target_id)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_summary_is_computed_from_the_ingested_reviews(client, fetcher):
+    target = s1_helpers.create_target(client, "Phone X")
+
+    attempt = ingest(client, fetcher, target["id"], PROVIDER_RECORDS)
+    summary = summary_for(client, target["id"]).json()
+
+    assert (attempt["reviews_found"], attempt["reviews_skipped"]) == (4, 2)
+    assert summary["target_name"] == "Phone X"
+    assert summary["review_count"] == 4
+    assert summary["average_rating"] == 3.8  # (5 + 4 + 4 + 2) / 4
+    assert summary["rating_distribution"] == {"1": 0, "2": 1, "3": 0, "4": 2, "5": 1}
+
+
+def test_qa_context_is_exactly_the_ingested_dataset(client, fetcher, llm):
+    target = s1_helpers.create_target(client, "Phone X")
+    ingest(client, fetcher, target["id"], PROVIDER_RECORDS)
+
+    answer = ask(client, target["id"]).json()
+    summary = summary_for(client, target["id"]).json()
+
+    sent = llm.last_request["user_prompt"]
+    for text in VALID_TEXTS:
+        assert text in sent
+    assert "No rating was given here." not in sent  # skipped records stay out
+    assert answer["reviews_used"] == answer["reviews_total"] == 4
+    assert answer["reviews_total"] == summary["review_count"]
+
+
+def test_failed_reingestion_keeps_the_summary_and_qa_dataset(client, fetcher, llm):
+    target = s1_helpers.create_target(client, "Phone X")
+    ingest(client, fetcher, target["id"], PROVIDER_RECORDS[:2])
+
+    fetcher.error = ReviewSourceError("provider_timeout", "upstream detail")
+    assert s1_helpers.start(client, target["id"]).status_code == 504
+
+    summary = summary_for(client, target["id"]).json()
+    answer = ask(client, target["id"]).json()
+
+    assert summary["review_count"] == 2
+    assert answer["status"] == "answered"
+    assert answer["reviews_used"] == 2
+    assert "Battery life is superb." in llm.last_request["user_prompt"]
+
+
+def test_another_user_cannot_read_the_summary_or_ask_questions(client, fetcher, llm):
+    target = s1_helpers.create_target(client, "Phone X", token="token-a")
+    ingest(client, fetcher, target["id"], PROVIDER_RECORDS)
+
+    foreign_summary = summary_for(client, target["id"], token="token-b")
+    missing_summary = summary_for(client, 999999, token="token-b")
+    foreign_question = ask(client, target["id"], token="token-b")
+
+    assert foreign_summary.status_code == 404
+    assert foreign_summary.json() == missing_summary.json()
+    assert foreign_question.status_code == 404
+    assert llm.call_count == 0
+
+
+def test_switching_targets_switches_summary_and_qa_context(client, fetcher, llm):
+    phone = s1_helpers.create_target(client, "Phone X")
+    store = s1_helpers.create_target(client, "Corner Store")
+    ingest(client, fetcher, phone["id"], PROVIDER_RECORDS)
+    ingest(
+        client,
+        fetcher,
+        store["id"],
+        [{"review_id": "s1", "rating": 1, "snippet": "Customer service was rude."}],
+    )
+
+    ask(client, phone["id"])
+    ask(client, store["id"])
+    store_summary = summary_for(client, store["id"]).json()
+
+    latest = llm.last_request
+    assert "Customer service was rude." in latest["user_prompt"]
+    assert "Battery" not in latest["user_prompt"]
+    assert "Corner Store" in latest["system_prompt"]
+    assert "Phone X" not in latest["system_prompt"]
+    assert (store_summary["target_name"], store_summary["review_count"]) == (
+        "Corner Store",
+        1,
+    )

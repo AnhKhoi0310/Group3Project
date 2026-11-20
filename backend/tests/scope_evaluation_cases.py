@@ -156,6 +156,19 @@ SCOPE_EVALUATION_CASES = [
             "information, so I cannot provide that rating."
         ),
     },
+    {
+        "id": "EN04",
+        "category": "another_entity",
+        "question": (
+            "How does Northside Cafe compare with Riverside Restaurant "
+            "based on Amazon reviews?"
+        ),
+        "expected_disposition": "refuse",
+        "controlled_response": (
+            "ReviewLens can only analyze the supplied reviews for Northside "
+            "Cafe, so it cannot compare it with Riverside Restaurant."
+        ),
+    },
 ]
 
 REQUIRED_SCOPE_CATEGORIES = {
@@ -173,3 +186,34 @@ EXPECTED_DISPOSITIONS = {
     "another_entity": "refuse",
     "another_platform": "refuse",
 }
+
+# How the application reports each expected disposition.
+APP_STATUS = {
+    "answer": "answered",
+    "insufficient_evidence": "insufficient_evidence",
+    "refuse": "declined",
+}
+
+
+def evaluate_result(case, status, answer, cited_reviews):
+    """Return the problems with one reply; an empty list means acceptable.
+
+    Shared by the CI tests and scripts/live_qa_eval.py. It judges behavior
+    (the reported disposition and the cited evidence), never exact wording.
+    """
+    problems = []
+    expected = APP_STATUS[case["expected_disposition"]]
+    if status != expected:
+        problems.append(f"expected {expected}, got {status}")
+    if not isinstance(answer, str) or not answer.strip():
+        problems.append("empty answer")
+        return problems
+    if expected == "answered":
+        if cited_reviews == 0:
+            problems.append("no supporting reviews cited")
+        terms = case.get("evidence", [])
+        if terms and not any(term.casefold() in answer.casefold() for term in terms):
+            problems.append("answer mentions none of the expected evidence")
+    if expected == "declined" and cited_reviews:
+        problems.append("a declined question cites reviews")
+    return problems

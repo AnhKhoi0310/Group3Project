@@ -1,9 +1,19 @@
+"""Scope-guard evaluation set (S2-004).
+
+The cases live in scope_evaluation_cases.py and cover in-scope questions,
+insufficient evidence, general knowledge, other entities and other platforms.
+``evaluate_result`` judges behavior, not wording, and the same judge is used
+against the live model by scripts/live_qa_eval.py.
+"""
+
 import pytest
-from fake_llm import FakeLLM
+from fake_llm import FakeLLM, structured_reply
 from scope_evaluation_cases import (
+    APP_STATUS,
     EXPECTED_DISPOSITIONS,
     REQUIRED_SCOPE_CATEGORIES,
     SCOPE_EVALUATION_CASES,
+    evaluate_result,
 )
 from test_s2_003_qa_harness import (
     create_review,
@@ -14,52 +24,11 @@ from test_s2_003_qa_harness import (
 
 from app.services.qa import answer_question
 
-VALID_DISPOSITIONS = {
-    "answer",
-    "insufficient_evidence",
-    "refuse",
-}
+CASE_IDS = [case["id"] for case in SCOPE_EVALUATION_CASES]
 
-INSUFFICIENT_EVIDENCE_MARKERS = (
-    "not enough",
-    "insufficient",
-    "do not contain enough",
-    "does not contain enough",
-    "do not provide enough",
-)
 
-REFUSAL_MARKERS = (
-    "cannot",
-    "can't",
-    "unable",
-    "outside my scope",
-    "outside the scope",
-    "not within my scope",
-    "do not have information",
-    "does not contain",
-    "do not contain",
-    "not available in",
-    "cannot provide",
-    "can only analyze",
-)
-
-SCOPE_MARKERS = (
-    "active review",
-    "active dataset",
-    "active target",
-    "supplied reviews",
-    "reviewlens",
-    "review platform",
-    "general geography",
-    "general-knowledge",
-    "general knowledge",
-    "general-purpose code",
-    "another restaurant",
-    "riverside restaurant",
-    "brand b",
-    "google maps",
-    "tripadvisor",
-)
+def case_by_category(category):
+    return next(c for c in SCOPE_EVALUATION_CASES if c["category"] == category)
 
 
 def create_evaluation_dataset(db):
@@ -68,49 +37,31 @@ def create_evaluation_dataset(db):
     target = create_target(db, user.id, "Northside Cafe")
 
     create_successful_ingestion(db, target.id)
+    reviews = [
+        create_review(
+            db,
+            target.id,
+            "The coffee was excellent and the staff were friendly.",
+            rating=5,
+        ),
+        create_review(
+            db,
+            target.id,
+            "The wait was too long and the service was slow.",
+            rating=2,
+        ),
+    ]
+    return user, target, reviews
 
-    create_review(
-        db,
-        target.id,
-        "The coffee was excellent and the staff were friendly.",
-        rating=5,
-    )
-    create_review(
-        db,
-        target.id,
-        "The wait was too long and the service was slow.",
-        rating=2,
-    )
 
-    return user, target
+def controlled_reply(case, reviews):
+    """The reply a well-behaved model would give, in the required JSON shape."""
+    status = APP_STATUS[case["expected_disposition"]]
+    ids = [review.id for review in reviews] if status == "answered" else []
+    return structured_reply(status, case["controlled_response"], ids)
 
 
-def evaluate_response(case, response_text):
-    """
-    Evaluate a response against the intended disposition.
-
-    This deliberately checks behavioral indicators rather than requiring
-    one exact natural-language response.
-    """
-    if not isinstance(response_text, str) or not response_text.strip():
-        return False
-
-    response = response_text.casefold()
-    disposition = case["expected_disposition"]
-
-    if disposition == "answer":
-        evidence = case.get("evidence", [])
-        return any(term.casefold() in response for term in evidence)
-
-    if disposition == "insufficient_evidence":
-        return any(marker in response for marker in INSUFFICIENT_EVIDENCE_MARKERS)
-
-    if disposition == "refuse":
-        has_refusal = any(marker in response for marker in REFUSAL_MARKERS)
-        identifies_scope = any(marker in response for marker in SCOPE_MARKERS)
-        return has_refusal and identifies_scope
-
-    return False
+# The evaluation set itself
 
 
 def test_all_required_categories_are_present():
@@ -121,17 +72,13 @@ def test_all_required_categories_are_present():
 
 def test_every_required_category_has_multiple_examples():
     for category in REQUIRED_SCOPE_CATEGORIES:
-        matching_cases = [
-            case for case in SCOPE_EVALUATION_CASES if case["category"] == category
-        ]
+        matching = [c for c in SCOPE_EVALUATION_CASES if c["category"] == category]
 
-        assert len(matching_cases) >= 2
+        assert len(matching) >= 2
 
 
 def test_case_ids_are_unique():
-    case_ids = [case["id"] for case in SCOPE_EVALUATION_CASES]
-
-    assert len(case_ids) == len(set(case_ids))
+    assert len(CASE_IDS) == len(set(CASE_IDS))
 
 
 def test_each_category_has_the_correct_expected_disposition():
@@ -145,76 +92,75 @@ def test_evaluation_cases_have_valid_structure():
         assert case["question"].strip()
         assert case["controlled_response"].strip()
         assert case["category"] in REQUIRED_SCOPE_CATEGORIES
-        assert case["expected_disposition"] in VALID_DISPOSITIONS
+        assert case["expected_disposition"] in APP_STATUS
 
         if case["expected_disposition"] == "answer":
             assert case.get("evidence")
 
 
-@pytest.mark.parametrize(
-    "case",
-    SCOPE_EVALUATION_CASES,
-    ids=[case["id"] for case in SCOPE_EVALUATION_CASES],
-)
-def test_controlled_response_matches_expected_disposition(case):
-    assert evaluate_response(
-        case,
-        case["controlled_response"],
-    )
+# The judge
 
 
-def test_evaluator_rejects_answer_without_review_evidence():
-    case = SCOPE_EVALUATION_CASES[0]
+@pytest.mark.parametrize("case", SCOPE_EVALUATION_CASES, ids=CASE_IDS)
+def test_expected_behavior_is_accepted(case):
+    status = APP_STATUS[case["expected_disposition"]]
+    cited = 1 if status == "answered" else 0
 
-    assert not evaluate_response(
-        case,
-        "The restaurant has a swimming pool.",
-    )
-
-
-def test_evaluator_rejects_general_knowledge_answer():
-    case = next(
-        case
-        for case in SCOPE_EVALUATION_CASES
-        if case["category"] == "general_knowledge"
-    )
-
-    assert not evaluate_response(
-        case,
-        "The capital of France is Paris.",
-    )
+    assert evaluate_result(case, status, case["controlled_response"], cited) == []
 
 
-def test_evaluator_rejects_refusal_without_scope_explanation():
-    case = next(
-        case
-        for case in SCOPE_EVALUATION_CASES
-        if case["category"] == "another_platform"
-    )
+def test_answering_a_general_knowledge_question_is_rejected():
+    case = case_by_category("general_knowledge")
 
-    assert not evaluate_response(
-        case,
-        "I cannot do that.",
-    )
+    problems = evaluate_result(case, "answered", "The capital is Paris.", 0)
+
+    assert "expected declined, got answered" in problems
 
 
-def test_evaluator_accepts_different_wording():
-    case = SCOPE_EVALUATION_CASES[0]
+def test_guessing_instead_of_reporting_missing_evidence_is_rejected():
+    case = case_by_category("insufficient_evidence")
 
-    assert evaluate_response(
-        case,
-        "Reviewers complimented the coffee and described it positively.",
-    )
+    problems = evaluate_result(case, "answered", "Yes, there is a big lot.", 0)
+
+    assert "expected insufficient_evidence, got answered" in problems
 
 
-@pytest.mark.parametrize(
-    "case",
-    SCOPE_EVALUATION_CASES,
-    ids=[case["id"] for case in SCOPE_EVALUATION_CASES],
-)
-def test_evaluation_question_uses_active_target_context(db, case):
-    user, target = create_evaluation_dataset(db)
-    llm = FakeLLM(response=case["controlled_response"])
+def test_answer_without_review_evidence_is_rejected():
+    case = case_by_category("in_scope")
+
+    problems = evaluate_result(case, "answered", "It has a swimming pool.", 0)
+
+    assert "no supporting reviews cited" in problems
+    assert "answer mentions none of the expected evidence" in problems
+
+
+def test_declined_answer_that_cites_reviews_is_rejected():
+    case = case_by_category("another_platform")
+
+    problems = evaluate_result(case, "declined", "I can't do that.", 2)
+
+    assert problems == ["a declined question cites reviews"]
+
+
+def test_empty_reply_is_rejected():
+    case = case_by_category("another_entity")
+
+    assert evaluate_result(case, "declined", "  ", 0) == ["empty answer"]
+
+
+def test_different_wording_is_accepted():
+    case = case_by_category("in_scope")
+
+    assert evaluate_result(case, "answered", "Reviewers loved the COFFEE.", 1) == []
+
+
+# Each case through the real orchestration path
+
+
+@pytest.mark.parametrize("case", SCOPE_EVALUATION_CASES, ids=CASE_IDS)
+def test_evaluation_case_through_the_qa_service(db, case):
+    user, target, reviews = create_evaluation_dataset(db)
+    llm = FakeLLM(response=controlled_reply(case, reviews))
 
     result = answer_question(
         session=db,
@@ -224,12 +170,12 @@ def test_evaluation_question_uses_active_target_context(db, case):
         llm=llm,
     )
 
-    assert result.status == "answered"
+    assert (
+        evaluate_result(case, result.status, result.answer, len(result.evidence)) == []
+    )
     assert result.target_id == target.id
     assert result.reviews_used == 2
     assert llm.call_count == 1
-
-    assert evaluate_response(case, result.answer)
 
     system_prompt = llm.last_request["system_prompt"]
     user_prompt = llm.last_request["user_prompt"]
