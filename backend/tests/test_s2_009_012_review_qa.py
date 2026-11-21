@@ -1,4 +1,3 @@
-
 """Review Q&A through the HTTP API (S2-008 to S2-012), on real MySQL.
 
 The model is the deterministic FakeLLM from fake_llm.py, so these tests check
