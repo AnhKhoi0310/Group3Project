@@ -1,5 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useLocation, useParams } from "react-router-dom";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+} from "react-router-dom";
 import { createFakeApi } from "../test/fakeAuth";
 import TargetSwitcher from "./TargetSwitcher";
 
@@ -28,9 +34,7 @@ function CurrentPath() {
 
 function WorkspaceHarness({ api }: { api: ReturnType<typeof createFakeApi> }) {
   const { targetId } = useParams();
-  const activeTarget = TARGETS.find(
-    (target) => String(target.id) === targetId,
-  );
+  const activeTarget = TARGETS.find((target) => String(target.id) === targetId);
 
   if (!activeTarget) {
     return <p>Target not found</p>;
@@ -78,9 +82,11 @@ describe("TargetSwitcher", () => {
       "Example Cafe",
     );
 
-    expect(screen.getByRole("combobox", {
-      name: "Switch active target",
-    })).toHaveValue("1");
+    expect(
+      screen.getByRole("combobox", {
+        name: "Switch active target",
+      }),
+    ).toHaveValue("1");
 
     expect(api.request).toHaveBeenCalledWith("/api/targets");
   });
@@ -122,7 +128,9 @@ describe("TargetSwitcher", () => {
       screen.queryByRole("option", { name: "Second Bakery" }),
     ).not.toBeInTheDocument();
 
-    expect(screen.getByRole("option", { name: "Example Cafe" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Example Cafe" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps the active target visible if loading the target list fails", async () => {
@@ -139,6 +147,8 @@ describe("TargetSwitcher", () => {
       "Example Cafe",
     );
 
-    expect(screen.getByRole("option", { name: "Example Cafe" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Example Cafe" }),
+    ).toBeInTheDocument();
   });
 });

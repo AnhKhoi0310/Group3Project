@@ -79,11 +79,7 @@ function describeAttempt(attempt: IngestionAttempt): string {
 }
 
 type DisplayIngestionStatus =
-  | "Not started"
-  | "Processing"
-  | "Succeeded"
-  | "Partial success"
-  | "Failed";
+  "Not started" | "Processing" | "Succeeded" | "Partial success" | "Failed";
 
 function getDisplayStatus(
   busy: boolean,
@@ -197,9 +193,7 @@ export default function TargetWorkspacePage() {
       } catch (caught) {
         if (!active) return;
 
-        setError(
-          caught instanceof ApiError ? caught.message : UNEXPECTED,
-        );
+        setError(caught instanceof ApiError ? caught.message : UNEXPECTED);
       }
     }
 
@@ -225,9 +219,7 @@ export default function TargetWorkspacePage() {
         status: latest.status ?? "succeeded",
       });
     } catch (caught) {
-      setIngestError(
-        caught instanceof ApiError ? caught.message : UNEXPECTED,
-      );
+      setIngestError(caught instanceof ApiError ? caught.message : UNEXPECTED);
 
       // Fetch the persisted attempt so the workspace displays the backend's
       // authoritative failed state.

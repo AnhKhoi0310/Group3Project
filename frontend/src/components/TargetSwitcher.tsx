@@ -36,9 +36,7 @@ export default function TargetSwitcher({
       .catch((caught: unknown) => {
         if (!active) return;
 
-        setError(
-          caught instanceof ApiError ? caught.message : UNEXPECTED,
-        );
+        setError(caught instanceof ApiError ? caught.message : UNEXPECTED);
       })
       .finally(() => {
         if (active) {
@@ -108,9 +106,7 @@ export default function TargetSwitcher({
             className="min-w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100"
           >
             {!activeTargetIsListed && (
-              <option value={String(activeTargetId)}>
-                {activeTargetName}
-              </option>
+              <option value={String(activeTargetId)}>{activeTargetName}</option>
             )}
 
             {targets.map((target) => (
