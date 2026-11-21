@@ -127,7 +127,9 @@ describe("TargetWorkspacePage", () => {
     renderPage(api, { created: true });
 
     expect(await screen.findByText(/Target created/)).toBeVisible();
-    expect(screen.getByRole("status")).toHaveTextContent("Target created");
+    expect(
+      screen.getByText("Target created. It is saved to your account."),
+    ).toHaveAttribute("role", "status");
   });
 
   it("shows no confirmation when opened normally", async () => {
