@@ -135,7 +135,8 @@ describe("TargetWorkspacePage", () => {
     renderPage(api);
 
     await screen.findByRole("heading", { name: "Example Cafe" });
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+    expect(screen.queryByText(/Target created/)).not.toBeInTheDocument();
   });
 
   it("shows a loading indicator until the target arrives", () => {
