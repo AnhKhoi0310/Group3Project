@@ -14,8 +14,12 @@ import LoadingIndicator from "../components/LoadingIndicator";
 import QuestionPanel from "../components/QuestionPanel";
 import ReviewList from "../components/ReviewList";
 import ReviewSummaryCard from "../components/ReviewSummaryCard";
+import TargetSwitcher from "../components/TargetSwitcher";
 
-const PLATFORM_LABELS: Record<string, string> = { google_maps: "Google Maps" };
+const PLATFORM_LABELS: Record<string, string> = {
+  google_maps: "Google Maps",
+};
+
 const UNEXPECTED = "Something went wrong on our side. Please try again.";
 
 function describeFailure(category: string | null | undefined): string {
@@ -31,6 +35,7 @@ function describeFailure(category: string | null | undefined): string {
     persistence_error:
       "Reviews were collected but could not be saved. Try again.",
   };
+
   return (
     messages[category ?? ""] ??
     "The previous review collection attempt failed. Try again."
@@ -48,12 +53,14 @@ function formatSkippedReasons(
   reasons: Record<string, number> | undefined,
 ): string {
   if (!reasons) return "";
+
   const parts = Object.entries(reasons)
     .filter(([, count]) => count > 0)
     .map(
       ([reason, count]) =>
         `${count} (${SKIP_REASON_LABELS[reason] ?? reason.replace(/_/g, " ")})`,
     );
+
   return parts.length > 0 ? `: ${parts.join(", ")}` : "";
 }
 
@@ -61,15 +68,22 @@ function describeAttempt(attempt: IngestionAttempt): string {
   const found = `Found ${attempt.reviews_found} ${
     attempt.reviews_found === 1 ? "review" : "reviews"
   }.`;
+
   if (attempt.reviews_skipped === 0) return found;
+
   const breakdown = formatSkippedReasons(attempt.skipped_reasons);
+
   return `${found} ${attempt.reviews_skipped} ${
     attempt.reviews_skipped === 1 ? "was" : "were"
   } skipped and excluded from the active dataset${breakdown}.`;
 }
 
 type DisplayIngestionStatus =
-  "Not started" | "Processing" | "Succeeded" | "Partial success" | "Failed";
+  | "Not started"
+  | "Processing"
+  | "Succeeded"
+  | "Partial success"
+  | "Failed";
 
 function getDisplayStatus(
   busy: boolean,
@@ -78,15 +92,19 @@ function getDisplayStatus(
   if (busy || attempt?.status === "processing") {
     return "Processing";
   }
+
   if (!attempt) {
     return "Not started";
   }
+
   if (attempt.status === "failed") {
     return "Failed";
   }
+
   if (attempt.reviews_skipped > 0 || attempt.reviews_found === 0) {
     return "Partial success";
   }
+
   return "Succeeded";
 }
 
@@ -112,16 +130,20 @@ function describeDatasetReadiness(
   switch (status) {
     case "Processing":
       return "Ingestion is currently running. Analysis will be ready once collection finishes.";
+
     case "Succeeded":
       return attempt && attempt.reviews_found === 0
         ? "Ingestion completed, but no usable reviews were added to the dataset."
         : "Dataset is ready for analysis.";
+
     case "Partial success":
       return attempt && attempt.reviews_found > 0
         ? "Dataset is ready for analysis, though some source records were skipped."
         : "Ingestion finished, but no usable reviews were added to the dataset.";
+
     case "Failed":
       return "The latest ingestion attempt failed. Any previously saved reviews remain available.";
+
     default:
       return "No ingestion has been run for this target yet. Collect reviews to build an analysis dataset.";
   }
@@ -131,8 +153,10 @@ export default function TargetWorkspacePage() {
   const { api } = useAuth();
   const { targetId } = useParams();
   const location = useLocation();
+
   const justCreated =
     (location.state as { created?: boolean } | null)?.created === true;
+
   const [target, setTarget] = useState<AnalysisTarget | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -142,32 +166,45 @@ export default function TargetWorkspacePage() {
 
   useEffect(() => {
     if (!targetId) return;
+
     const id = targetId;
     let active = true;
+
+    // Clear the previous target's workspace state before loading the next.
     setTarget(null);
     setError("");
     setAttempt(null);
     setIngestError("");
+    setBusy(false);
 
     async function load() {
       try {
         const item = await getTarget(api, id);
+
         if (!active) return;
+
         setTarget(item);
 
         const latest = await getLatestIngestion(api, id);
+
         if (!active) return;
+
         setAttempt(latest);
+
         if (latest?.status === "failed") {
           setIngestError(describeFailure(latest.failure_category));
         }
       } catch (caught) {
         if (!active) return;
-        setError(caught instanceof ApiError ? caught.message : UNEXPECTED);
+
+        setError(
+          caught instanceof ApiError ? caught.message : UNEXPECTED,
+        );
       }
     }
 
     void load();
+
     return () => {
       active = false;
     };
@@ -175,16 +212,25 @@ export default function TargetWorkspacePage() {
 
   async function collect() {
     if (!target) return;
+
     setBusy(true);
     setIngestError("");
+
     try {
       const latest = await startIngestion(api, target.id);
+
       // Keep the page tolerant of older mocked API responses during migration.
-      setAttempt({ ...latest, status: latest.status ?? "succeeded" });
+      setAttempt({
+        ...latest,
+        status: latest.status ?? "succeeded",
+      });
     } catch (caught) {
-      setIngestError(caught instanceof ApiError ? caught.message : UNEXPECTED);
-      // The POST reports a friendly error; fetch the persisted attempt so the
-      // workspace still displays the backend's authoritative failed state.
+      setIngestError(
+        caught instanceof ApiError ? caught.message : UNEXPECTED,
+      );
+
+      // Fetch the persisted attempt so the workspace displays the backend's
+      // authoritative failed state.
       try {
         setAttempt(await getLatestIngestion(api, String(target.id)));
       } catch {
@@ -219,10 +265,13 @@ export default function TargetWorkspacePage() {
         <Link to="/targets" className="text-sm font-medium text-indigo-700">
           Back to your targets
         </Link>
+
         <h1 className="mt-2 text-2xl font-semibold">{target.name}</h1>
+
         <p className="mt-1 text-sm text-slate-600">
           {PLATFORM_LABELS[target.platform] ?? target.platform}
         </p>
+
         <p className="mt-1 text-sm text-slate-600">
           <a
             href={target.source_url}
@@ -234,6 +283,13 @@ export default function TargetWorkspacePage() {
           </a>
         </p>
       </div>
+
+      <TargetSwitcher
+        api={api}
+        activeTargetId={target.id}
+        activeTargetName={target.name}
+      />
+
       {justCreated && (
         <p
           role="status"
@@ -242,6 +298,7 @@ export default function TargetWorkspacePage() {
           Target created. It is saved to your account.
         </p>
       )}
+
       <section
         aria-labelledby="ingestion-status-heading"
         className="space-y-4 rounded-lg border border-slate-200 bg-white p-6"
@@ -250,9 +307,12 @@ export default function TargetWorkspacePage() {
           <h2 id="ingestion-status-heading" className="text-lg font-semibold">
             Ingestion status for {target.name}
           </h2>
+
           <span
             data-testid="ingestion-status-badge"
-            className={`rounded-md border px-2.5 py-0.5 text-sm font-medium ${getStatusBadgeClasses(displayStatus)}`}
+            className={`rounded-md border px-2.5 py-0.5 text-sm font-medium ${getStatusBadgeClasses(
+              displayStatus,
+            )}`}
           >
             {displayStatus}
           </span>
@@ -267,24 +327,28 @@ export default function TargetWorkspacePage() {
         </Button>
 
         {ingestError && <ErrorMessage message={ingestError} />}
+
         {attempt?.status === "succeeded" && (
           <p role="status" className="text-sm text-slate-700">
             {describeAttempt(attempt)}
           </p>
         )}
       </section>
+
       <ReviewSummaryCard
         api={api}
         targetId={String(target.id)}
         targetName={target.name}
         refreshKey={reviewsVersion}
       />
+
       <QuestionPanel
         key={target.id}
         api={api}
         targetId={String(target.id)}
         targetName={target.name}
       />
+
       <ReviewList
         api={api}
         targetId={String(target.id)}
