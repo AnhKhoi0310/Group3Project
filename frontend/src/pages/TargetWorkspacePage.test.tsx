@@ -1,4 +1,3 @@
-
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ApiError } from "../api/client";
@@ -263,9 +262,9 @@ describe("TargetWorkspacePage review collection", () => {
       ),
     ).toBeVisible();
 
-    expect(
-      screen.getByRole("alert"),
-    ).toHaveTextContent("The review source is unavailable.");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The review source is unavailable.",
+    );
   });
 
   it("disables the button and explains the wait while collecting", async () => {
