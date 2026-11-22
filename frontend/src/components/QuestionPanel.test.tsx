@@ -104,12 +104,13 @@ describe("QuestionPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("says when there are no reviews to analyze", async () => {
+  it("says when there are no successfully ingested reviews", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue(
       answer({
         status: "insufficient_evidence",
-        answer: "There are not enough successfully ingested reviews.",
+        answer:
+          "No successfully ingested reviews are available for this target. Complete a successful review ingestion before asking ReviewLens questions.",
         reviews_used: 0,
         reviews_total: 0,
         evidence: [],
@@ -122,6 +123,11 @@ describe("QuestionPanel", () => {
     expect(await screen.findByTestId("qa-status")).toHaveTextContent(
       "No reviews to analyze yet",
     );
+    expect(
+      await screen.findByText(
+        "No successfully ingested reviews are available for this target. Complete a successful review ingestion before asking ReviewLens questions.",
+      ),
+    ).toBeVisible();
     expect(screen.queryByText(/^Based on/)).not.toBeInTheDocument();
   });
 

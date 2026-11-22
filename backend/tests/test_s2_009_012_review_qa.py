@@ -90,6 +90,7 @@ def add_reviews(session_factory, target_id, texts, rating=5, ingested=True):
             for text in texts
         ]
         session.add_all(rows)
+
         if ingested:
             session.add(
                 IngestionAttempt(
@@ -99,6 +100,7 @@ def add_reviews(session_factory, target_id, texts, rating=5, ingested=True):
                     reviews_skipped=0,
                 )
             )
+
         session.commit()
         return [row.id for row in rows]
 
@@ -153,7 +155,7 @@ def test_question_about_missing_evidence_is_reported_as_insufficient(
     assert response.status_code == 200
     assert body["status"] == "insufficient_evidence"
     assert body["evidence"] == []
-    assert body["reviews_used"] == 2  # the model did see the dataset
+    assert body["reviews_used"] == 2
     supplied = llm.last_request["user_prompt"].split("Review evidence", 1)[1]
     assert "parking" not in supplied.lower()
     system_prompt = llm.last_request["system_prompt"]
@@ -229,6 +231,107 @@ def test_target_without_reviews_does_not_reach_the_model(client, llm):
     assert llm.call_count == 0
 
 
+# ---------------------------------------------------------------------------
+# S2-020: Handle a target without successfully ingested review data.
+# ---------------------------------------------------------------------------
+
+
+def test_target_with_review_rows_but_no_successful_ingestion_does_not_reach_model(
+    client, llm, session_factory
+):
+    """Persisted rows alone are not a successfully ingested Q&A dataset."""
+    target = create_target(client)
+
+    add_reviews(
+        session_factory,
+        target["id"],
+        ["UNVERIFIED-REVIEW-ROW-MUST-NOT-ENTER-AI-CONTEXT"],
+        ingested=False,
+    )
+
+    response = ask(client, target["id"])
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["status"] == "insufficient_evidence"
+    assert body["reviews_used"] == 0
+    assert body["reviews_total"] == 1
+    assert "successfully ingested" in body["answer"]
+    assert "Complete a successful review ingestion" in body["answer"]
+
+    assert llm.call_count == 0
+    assert llm.requests == []
+
+
+def test_successful_ingestion_with_zero_reviews_does_not_reach_model(
+    client, llm, session_factory
+):
+    """A successful run with no usable records is still an empty dataset."""
+    target = create_target(client)
+
+    add_reviews(
+        session_factory,
+        target["id"],
+        [],
+    )
+
+    response = ask(client, target["id"])
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["status"] == "insufficient_evidence"
+    assert body["reviews_used"] == 0
+    assert body["reviews_total"] == 0
+
+    assert llm.call_count == 0
+    assert llm.requests == []
+
+
+def test_latest_failed_ingestion_keeps_previous_successful_dataset_available(
+    client, llm, session_factory
+):
+    """A later failed attempt must not invalidate an earlier successful dataset."""
+    target = create_target(client)
+
+    add_reviews(
+        session_factory,
+        target["id"],
+        ["PREVIOUS-SUCCESSFUL-DATASET-REMAINS-AVAILABLE"],
+    )
+
+    with session_factory() as session:
+        session.add(
+            IngestionAttempt(
+                target_id=target["id"],
+                status="failed",
+                reviews_found=0,
+                reviews_skipped=0,
+                failure_category="source_unavailable",
+            )
+        )
+        session.commit()
+
+    response = ask(client, target["id"])
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["status"] == "answered"
+    assert body["reviews_used"] == 1
+    assert body["reviews_total"] == 1
+
+    assert llm.call_count == 1
+    assert (
+        "PREVIOUS-SUCCESSFUL-DATASET-REMAINS-AVAILABLE"
+        in llm.last_request["user_prompt"]
+    )
+
+
 def test_context_is_capped_at_the_most_recent_reviews(client, llm, session_factory):
     target = create_target(client)
     texts = [f"review-number-{i:03d}" for i in range(MAX_CONTEXT_REVIEWS + 5)]
@@ -239,8 +342,8 @@ def test_context_is_capped_at_the_most_recent_reviews(client, llm, session_facto
     assert body["reviews_used"] == MAX_CONTEXT_REVIEWS
     assert body["reviews_total"] == MAX_CONTEXT_REVIEWS + 5
     sent = llm.last_request["user_prompt"]
-    assert "review-number-204" in sent  # newest kept
-    assert "review-number-000" not in sent  # oldest left out
+    assert "review-number-204" in sent
+    assert "review-number-000" not in sent
 
 
 def test_qa_and_summary_describe_the_same_dataset(client, llm, session_factory):
@@ -336,12 +439,18 @@ def test_owner_fields_in_the_body_are_ignored(client, llm, session_factory):
 
     response = client.post(
         f"/api/targets/{mine['id']}/questions",
-        json={"question": "Hi?", "owner_id": 1, "user_id": 1, "target_id": other["id"]},
+        json={
+            "question": "Hi?",
+            "owner_id": 1,
+            "user_id": 1,
+            "target_id": other["id"],
+        },
         headers=headers(),
     )
 
     assert response.json()["target_id"] == mine["id"]
     assert "SECRET-PHRASE-B" not in llm.last_request["user_prompt"]
+
     with session_factory() as session:
         assert session.get(AnalysisTarget, other["id"]).name == "User B Diner"
 
