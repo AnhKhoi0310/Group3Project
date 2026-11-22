@@ -47,8 +47,8 @@ class QAResult:
 
 
 INSUFFICIENT_EVIDENCE_ANSWER = (
-    "There are not enough successfully ingested reviews for this target "
-    "to answer questions."
+    "No successfully ingested reviews are available for this target. "
+    "Complete a successful review ingestion before asking ReviewLens questions."
 )
 
 MODEL_REFUSAL_ANSWER = (
@@ -116,14 +116,14 @@ You must follow these rules:
 9. Keep answers concise and distinguish evidence from uncertainty.
    When it helps, mention how many reviews support a point.
 10. Report the result in the required JSON format:
-   - "disposition": "answered" when the supplied reviews support the
-     answer; "insufficient_evidence" when the question is about this
-     target but the reviews do not contain the information needed;
-     "declined" when the question is outside ReviewLens's scope.
-   - "answer": the text shown to the user.
-   - "evidence_review_ids": the review_id values of the supplied reviews
-     the answer relies on. Use only review_id values from this request.
-     Use an empty list when declining or when no review supports an answer.
+    - "disposition": "answered" when the supplied reviews support the
+      answer; "insufficient_evidence" when the question is about this
+      target but the reviews do not contain the information needed;
+      "declined" when the question is outside ReviewLens's scope.
+    - "answer": the text shown to the user.
+    - "evidence_review_ids": the review_id values of the supplied reviews
+      the answer relies on. Use only review_id values from this request.
+      Use an empty list when declining or when no review supports an answer.
 
 The supplied review context is the complete evidence available to you
 for this request. Do not assume that other reviews or previous

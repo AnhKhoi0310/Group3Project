@@ -117,6 +117,11 @@ describe("TargetWorkspacePage", () => {
     expect(screen.getByText(TARGET.source_url)).toBeVisible();
     expect(screen.getByText("Not started")).toBeVisible();
     expect(
+      screen.getByText(
+        "No reviews have been ingested for this target. Complete a successful review ingestion before asking ReviewLens questions.",
+      ),
+    ).toBeVisible();
+    expect(
       screen.getByRole("button", { name: "Collect reviews" }),
     ).toBeEnabled();
     expect(api.request).toHaveBeenCalledWith("/api/targets/1");
@@ -223,7 +228,7 @@ describe("TargetWorkspacePage review collection", () => {
     ).toBeVisible();
   });
 
-  it("displays Partial success when ingestion finishes with zero usable reviews", async () => {
+  it("displays Partial success and explains that ingestion must succeed when there are zero usable reviews", async () => {
     const api = apiWithState(RESULT_EMPTY);
     renderPage(api);
 
@@ -232,9 +237,34 @@ describe("TargetWorkspacePage review collection", () => {
     ).toHaveTextContent("Partial success");
     expect(
       screen.getByText(
-        "Ingestion finished, but no usable reviews were added to the dataset.",
+        "No successfully ingested reviews are available for this target. Complete a successful review ingestion before asking ReviewLens questions.",
       ),
     ).toBeVisible();
+  });
+
+  it("explains that previously saved reviews remain available when the latest ingestion attempt fails", async () => {
+    const api = apiWithState({
+      target_id: 1,
+      status: "failed",
+      reviews_found: 0,
+      reviews_skipped: 0,
+      failure_category: "provider_unavailable",
+    });
+    renderPage(api);
+
+    expect(
+      await screen.findByTestId("ingestion-status-badge"),
+    ).toHaveTextContent("Failed");
+
+    expect(
+      screen.getByText(
+        "The latest ingestion attempt failed. Any previously saved reviews remain available. If no successful ingestion exists, complete a successful review ingestion before asking ReviewLens questions.",
+      ),
+    ).toBeVisible();
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The review source is unavailable.",
+    );
   });
 
   it("disables the button and explains the wait while collecting", async () => {

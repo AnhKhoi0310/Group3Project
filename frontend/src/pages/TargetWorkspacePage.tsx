@@ -128,20 +128,18 @@ function describeDatasetReadiness(
       return "Ingestion is currently running. Analysis will be ready once collection finishes.";
 
     case "Succeeded":
-      return attempt && attempt.reviews_found === 0
-        ? "Ingestion completed, but no usable reviews were added to the dataset."
-        : "Dataset is ready for analysis.";
+      return "Dataset is ready for analysis.";
 
     case "Partial success":
       return attempt && attempt.reviews_found > 0
         ? "Dataset is ready for analysis, though some source records were skipped."
-        : "Ingestion finished, but no usable reviews were added to the dataset.";
+        : "No successfully ingested reviews are available for this target. Complete a successful review ingestion before asking ReviewLens questions.";
 
     case "Failed":
-      return "The latest ingestion attempt failed. Any previously saved reviews remain available.";
+      return "The latest ingestion attempt failed. Any previously saved reviews remain available. If no successful ingestion exists, complete a successful review ingestion before asking ReviewLens questions.";
 
     default:
-      return "No ingestion has been run for this target yet. Collect reviews to build an analysis dataset.";
+      return "No reviews have been ingested for this target. Complete a successful review ingestion before asking ReviewLens questions.";
   }
 }
 
