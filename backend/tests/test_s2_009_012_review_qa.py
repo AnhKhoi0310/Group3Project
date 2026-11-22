@@ -344,3 +344,56 @@ def test_owner_fields_in_the_body_are_ignored(client, llm, session_factory):
     assert "SECRET-PHRASE-B" not in llm.last_request["user_prompt"]
     with session_factory() as session:
         assert session.get(AnalysisTarget, other["id"]).name == "User B Diner"
+
+
+def test_review_context_is_rebuilt_after_repeated_target_switches(
+    client, llm, session_factory
+):
+    """S2-019: each question receives only the currently requested target's reviews."""
+    first = create_target(client, "Battery Shop")
+    second = create_target(client, "Service Desk")
+
+    add_reviews(
+        session_factory,
+        first["id"],
+        ["UNIQUE-BATTERY-TARGET-ALPHA"],
+    )
+    add_reviews(
+        session_factory,
+        second["id"],
+        ["UNIQUE-SERVICE-TARGET-BETA"],
+    )
+
+    # First request: Target A.
+    first_response = ask(client, first["id"])
+    assert first_response.status_code == 200
+    first_request = llm.requests[-1]
+
+    # Second request: switch to Target B.
+    second_response = ask(client, second["id"])
+    assert second_response.status_code == 200
+    second_request = llm.requests[-1]
+
+    # Third request: switch back to Target A.
+    third_response = ask(client, first["id"])
+    assert third_response.status_code == 200
+    third_request = llm.requests[-1]
+
+    assert llm.call_count == 3
+
+    # Target A's first request contains only Target A context.
+    assert "UNIQUE-BATTERY-TARGET-ALPHA" in first_request["user_prompt"]
+    assert "UNIQUE-SERVICE-TARGET-BETA" not in first_request["user_prompt"]
+    assert "Battery Shop" in first_request["system_prompt"]
+
+    # Target B's request contains only Target B context.
+    assert "UNIQUE-SERVICE-TARGET-BETA" in second_request["user_prompt"]
+    assert "UNIQUE-BATTERY-TARGET-ALPHA" not in second_request["user_prompt"]
+    assert "Service Desk" in second_request["system_prompt"]
+    assert "Battery Shop" not in second_request["system_prompt"]
+
+    # Returning to Target A must not retain Target B's context.
+    assert "UNIQUE-BATTERY-TARGET-ALPHA" in third_request["user_prompt"]
+    assert "UNIQUE-SERVICE-TARGET-BETA" not in third_request["user_prompt"]
+    assert "Battery Shop" in third_request["system_prompt"]
+    assert "Service Desk" not in third_request["system_prompt"]
