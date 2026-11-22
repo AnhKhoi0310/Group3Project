@@ -13,32 +13,73 @@ interface Props {
   refreshKey: number;
 }
 
+interface SummaryState {
+  targetId: string;
+  summary: ReviewSummary | null;
+  error: string;
+}
+
 export default function ReviewSummaryCard({
   api,
   targetId,
   targetName,
   refreshKey,
 }: Props) {
-  const [summary, setSummary] = useState<ReviewSummary | null>(null);
-  const [error, setError] = useState("");
+  const [state, setState] = useState<SummaryState>({
+    targetId,
+    summary: null,
+    error: "",
+  });
 
   useEffect(() => {
     let active = true;
-    setError("");
+
+    // Immediately stop displaying data from the previously active target.
+    setState({
+      targetId,
+      summary: null,
+      error: "",
+    });
 
     getReviewSummary(api, targetId)
       .then((data) => {
-        if (active) setSummary(data);
+        if (!active) return;
+
+        // Never display a summary returned for a different target.
+        if (data.target_id !== Number(targetId)) {
+          setState({
+            targetId,
+            summary: null,
+            error: UNEXPECTED,
+          });
+          return;
+        }
+
+        setState({
+          targetId,
+          summary: data,
+          error: "",
+        });
       })
       .catch((caught: unknown) => {
         if (!active) return;
-        setError(caught instanceof ApiError ? caught.message : UNEXPECTED);
+
+        setState({
+          targetId,
+          summary: null,
+          error: caught instanceof ApiError ? caught.message : UNEXPECTED,
+        });
       });
 
     return () => {
       active = false;
     };
   }, [api, targetId, refreshKey]);
+
+  // This check also protects the render that occurs before the effect runs.
+  const isCurrentTarget = state.targetId === targetId;
+  const summary = isCurrentTarget ? state.summary : null;
+  const error = isCurrentTarget ? state.error : "";
 
   return (
     <section
@@ -48,10 +89,13 @@ export default function ReviewSummaryCard({
       <h2 id="review-summary-heading" className="text-lg font-semibold">
         Review summary for {targetName}
       </h2>
+
       {error && <ErrorMessage message={error} />}
+
       {!error && !summary && (
         <p className="text-sm text-slate-600">Loading review summary…</p>
       )}
+
       {summary && (
         <>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -66,6 +110,7 @@ export default function ReviewSummaryCard({
                 {summary.review_count}
               </p>
             </div>
+
             <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                 Average rating
@@ -80,13 +125,16 @@ export default function ReviewSummaryCard({
               </p>
             </div>
           </div>
+
           <div>
             <h3 className="text-sm font-medium text-slate-700">
               Rating distribution
             </h3>
+
             <ul className="mt-2 space-y-1 text-sm text-slate-700">
               {STAR_LEVELS.map((star) => {
                 const count = summary.rating_distribution[String(star)] ?? 0;
+
                 return (
                   <li
                     key={star}
