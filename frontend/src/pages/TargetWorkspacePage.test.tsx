@@ -1,3 +1,4 @@
+
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ApiError } from "../api/client";
@@ -240,6 +241,31 @@ describe("TargetWorkspacePage review collection", () => {
         "No successfully ingested reviews are available for this target. Complete a successful review ingestion before asking ReviewLens questions.",
       ),
     ).toBeVisible();
+  });
+
+  it("explains that previously saved reviews remain available when the latest ingestion attempt fails", async () => {
+    const api = apiWithState({
+      target_id: 1,
+      status: "failed",
+      reviews_found: 0,
+      reviews_skipped: 0,
+      failure_category: "provider_unavailable",
+    });
+    renderPage(api);
+
+    expect(
+      await screen.findByTestId("ingestion-status-badge"),
+    ).toHaveTextContent("Failed");
+
+    expect(
+      screen.getByText(
+        "The latest ingestion attempt failed. Any previously saved reviews remain available. If no successful ingestion exists, complete a successful review ingestion before asking ReviewLens questions.",
+      ),
+    ).toBeVisible();
+
+    expect(
+      screen.getByRole("alert"),
+    ).toHaveTextContent("The review source is unavailable.");
   });
 
   it("disables the button and explains the wait while collecting", async () => {
