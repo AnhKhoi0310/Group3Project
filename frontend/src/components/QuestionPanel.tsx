@@ -235,8 +235,7 @@ export default function QuestionPanel({
   const checking = reviewCount === "loading";
   const noReviews = reviewCount === 0;
   const unavailable = reviewCount === null;
-  const ready =
-    !collecting && !checking && !noReviews && !unavailable;
+  const ready = !collecting && !checking && !noReviews && !unavailable;
   const asking = entries.some((entry) => entry.pending);
 
   useEffect(() => {
@@ -433,9 +432,7 @@ export default function QuestionPanel({
         )}
 
         {checking && !collecting && (
-          <p className="text-sm text-slate-600">
-            Checking the review dataset…
-          </p>
+          <p className="text-sm text-slate-600">Checking the review dataset…</p>
         )}
 
         {unavailable && !collecting && (
