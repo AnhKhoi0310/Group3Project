@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     DateTime,
     Float,
@@ -75,6 +76,8 @@ class Review(Base):
     rating: Mapped[float] = mapped_column(Float, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     review_date: Mapped[str | None] = mapped_column(String(255))
+    reviewer_avatar_url: Mapped[str | None] = mapped_column(String(1024))
+    image_urls: Mapped[list[str] | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False
     )

@@ -85,6 +85,13 @@ class EvidenceRead(BaseModel):
     text: str
     reviewer_name: str | None
     review_date: str | None
+    reviewer_avatar_url: str | None = None
+    image_urls: list[str] = []
+
+    @field_validator("image_urls", mode="before")
+    @classmethod
+    def no_images_as_empty_list(cls, value: object) -> object:
+        return [] if value is None else value
 
 
 class AnswerRead(BaseModel):

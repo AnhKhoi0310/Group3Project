@@ -1,10 +1,48 @@
 """Normalize raw Google Maps reviews into a consistent format."""
 
 import math
+from urllib.parse import urlparse
+
+MAX_REVIEW_IMAGES = 6
+MAX_IMAGE_URL_LENGTH = 1024
+# Review photos and reviewer avatars are served by Google's image CDN. Other
+# hosts are dropped, so provider data can't point the browser anywhere else.
+ALLOWED_IMAGE_HOSTS = ("googleusercontent.com", "ggpht.com")
 
 
 class ReviewNormalizationError(ValueError):
     """A raw review contains invalid data."""
+
+
+def image_url(value: object) -> str | None:
+    """Return a safe https image URL from Google's image hosts, or None."""
+    if isinstance(value, dict):
+        value = value.get("image") or value.get("thumbnail")
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value or len(value) > MAX_IMAGE_URL_LENGTH:
+        return None
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return None
+    host = (parsed.hostname or "").lower()
+    allowed = any(host == h or host.endswith(f".{h}") for h in ALLOWED_IMAGE_HOSTS)
+    return value if parsed.scheme == "https" and allowed else None
+
+
+def _image_urls(raw_images: object) -> list[str]:
+    if not isinstance(raw_images, list):
+        return []
+    urls: list[str] = []
+    for item in raw_images:
+        url = image_url(item)
+        if url and url not in urls:
+            urls.append(url)
+        if len(urls) == MAX_REVIEW_IMAGES:
+            break
+    return urls
 
 
 def normalize_review(raw_review: dict, place_id: str) -> dict:
@@ -54,6 +92,8 @@ def normalize_review(raw_review: dict, place_id: str) -> dict:
         "rating": rating,
         "text": text,
         "date": date,
+        "avatar_url": image_url(user.get("thumbnail")),
+        "image_urls": _image_urls(raw_review.get("images")),
     }
 
 
