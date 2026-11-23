@@ -32,6 +32,9 @@ services:
 
   frontend:
     build: ./frontend
+    environment:
+      # Pick up code edits made on the host (see frontend/vite.config.ts).
+      VITE_WATCH_POLLING: "true"
     ports:
       - "5173:5173"
     volumes:
