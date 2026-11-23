@@ -8,6 +8,8 @@ export interface EvidenceReview {
   text: string;
   reviewer_name: string | null;
   review_date: string | null;
+  reviewer_avatar_url?: string | null;
+  image_urls?: string[];
 }
 
 export interface QuestionAnswer {

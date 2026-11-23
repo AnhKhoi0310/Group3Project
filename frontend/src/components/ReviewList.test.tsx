@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { ApiError } from "../api/client";
 import type { Review } from "../api/reviews";
 import { createFakeApi } from "../test/fakeAuth";
@@ -47,21 +47,16 @@ describe("ReviewList", () => {
     expect(screen.getByText("Anonymous")).toBeVisible();
   });
 
-  it("shows the first ten and reveals the rest on request", async () => {
+  it("lists every review inside its own scrolling panel", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue(
       Array.from({ length: 12 }, (_, i) => review(i + 1)),
     );
     renderList(api);
 
-    expect(await screen.findByText("Review text 10")).toBeVisible();
-    expect(screen.queryByText("Review text 11")).not.toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Show all 12 reviews" }),
-    );
-
-    expect(screen.getByText("Review text 12")).toBeVisible();
+    expect(await screen.findByText("Review text 12")).toBeVisible();
+    expect(screen.getByTestId("review-scroll")).toHaveClass("overflow-y-auto");
+    expect(screen.getByText("Showing 12 of 12 reviews")).toBeVisible();
   });
 
   it("explains what to do when nothing has been collected", async () => {

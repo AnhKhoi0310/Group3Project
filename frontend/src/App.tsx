@@ -1,4 +1,4 @@
-import { Link, Navigate, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import RequireAuth from "./auth/RequireAuth";
 import Button from "./components/Button";
@@ -9,13 +9,16 @@ import TargetWorkspacePage from "./pages/TargetWorkspacePage";
 
 export default function App() {
   const { session, logout } = useAuth();
+  // The analysis workspace uses a wide two-column layout with the chat docked.
+  const wide = /^\/targets\/\d+\/?$/.test(useLocation().pathname);
+  const width = wide ? "max-w-[100rem]" : "max-w-6xl";
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
         <nav
           aria-label="Main"
-          className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-6"
+          className={`mx-auto flex h-14 ${width} items-center gap-6 px-6`}
         >
           <span className="text-lg font-semibold">ReviewLens AI</span>
           {session.user && (
@@ -36,7 +39,7 @@ export default function App() {
           )}
         </nav>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className={`mx-auto ${width} px-6 py-8`}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route
