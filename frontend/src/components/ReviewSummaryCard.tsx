@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, type ApiClient } from "../api/client";
 import { getReviewSummary, type ReviewSummary } from "../api/reviews";
 import ErrorMessage from "./ErrorMessage";
@@ -11,6 +11,8 @@ interface Props {
   targetId: string;
   targetName: string;
   refreshKey: number;
+  /** Reports the review count once loaded, or null if it couldn't be loaded. */
+  onReviewCount?: (count: number | null) => void;
 }
 
 interface SummaryState {
@@ -24,7 +26,14 @@ export default function ReviewSummaryCard({
   targetId,
   targetName,
   refreshKey,
+  onReviewCount,
 }: Props) {
+  // Kept in a ref so a new callback from the parent doesn't trigger a refetch.
+  const reportCount = useRef(onReviewCount);
+  useEffect(() => {
+    reportCount.current = onReviewCount;
+  }, [onReviewCount]);
+
   const [state, setState] = useState<SummaryState>({
     targetId,
     summary: null,
@@ -47,6 +56,7 @@ export default function ReviewSummaryCard({
 
         // Never display a summary returned for a different target.
         if (data.target_id !== Number(targetId)) {
+          reportCount.current?.(null);
           setState({
             targetId,
             summary: null,
@@ -55,6 +65,7 @@ export default function ReviewSummaryCard({
           return;
         }
 
+        reportCount.current?.(data.review_count);
         setState({
           targetId,
           summary: data,
@@ -64,6 +75,7 @@ export default function ReviewSummaryCard({
       .catch((caught: unknown) => {
         if (!active) return;
 
+        reportCount.current?.(null);
         setState({
           targetId,
           summary: null,

@@ -246,7 +246,7 @@ describe("QuestionPanel", () => {
 
     ask("What do people like?");
 
-    expect(await screen.findByText(`${"a".repeat(280)}…`)).toBeVisible();
+    expect(await screen.findByText(`${"a".repeat(220)}…`)).toBeVisible();
     expect(screen.getByText(/Anonymous/)).toBeVisible();
   });
 });

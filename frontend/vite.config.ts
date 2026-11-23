@@ -4,6 +4,14 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    // Docker on Windows and macOS doesn't pass file-change events into the
+    // container, so docker-compose.yml turns on polling to pick up edits.
+    watch:
+      process.env.VITE_WATCH_POLLING === "true"
+        ? { usePolling: true, interval: 500 }
+        : undefined,
+  },
   test: {
     environment: "jsdom",
     globals: true,

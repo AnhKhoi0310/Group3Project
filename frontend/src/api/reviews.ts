@@ -10,6 +10,8 @@ export interface Review {
   text: string;
   review_date: string | null;
   created_at: string;
+  reviewer_avatar_url?: string | null;
+  image_urls?: string[];
 }
 
 export function listReviews(

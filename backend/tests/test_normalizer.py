@@ -30,6 +30,8 @@ def test_normalize_review_with_all_fields():
         "rating": 4.0,
         "text": "Great service!",
         "date": "2 weeks ago",
+        "avatar_url": None,
+        "image_urls": [],
     }
 
 

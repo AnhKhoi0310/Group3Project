@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -88,6 +88,13 @@ class ReviewRead(BaseModel):
     text: str
     review_date: str | None
     created_at: datetime
+    reviewer_avatar_url: str | None = None
+    image_urls: list[str] = []
+
+    @field_validator("image_urls", mode="before")
+    @classmethod
+    def no_images_as_empty_list(cls, value: object) -> object:
+        return [] if value is None else value
 
 
 def get_review_fetcher() -> Callable[[str], list[dict]]:

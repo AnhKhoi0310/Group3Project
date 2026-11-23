@@ -41,36 +41,50 @@ def save_reviews(
         review["review_id"] for review in reviews if review.get("review_id") is not None
     }
 
-    existing_ids: set[str] = set()
+    existing: dict[str, Review] = {}
     if source_ids:
-        query = select(Review.source_review_id).where(
+        query = select(Review).where(
             Review.target_id == target_id,
             Review.source_review_id.in_(source_ids),
         )
-        existing_ids = set(session.scalars(query).all())
+        existing = {row.source_review_id: row for row in session.scalars(query)}
 
     saved = 0
     for item in reviews:
         source_id = item.get("review_id")
-        if source_id is not None and source_id in existing_ids:
+        if source_id is not None and source_id in existing:
+            _fill_missing_media(existing[source_id], item)
             continue
 
-        session.add(
-            Review(
-                target_id=target_id,
-                source_review_id=source_id,
-                source_platform=source_platform,
-                reviewer_name=item.get("author"),
-                rating=item["rating"],
-                text=item["text"],
-                review_date=item.get("date"),
-            )
+        review = Review(
+            target_id=target_id,
+            source_review_id=source_id,
+            source_platform=source_platform,
+            reviewer_name=item.get("author"),
+            rating=item["rating"],
+            text=item["text"],
+            review_date=item.get("date"),
+            reviewer_avatar_url=item.get("avatar_url"),
+            image_urls=item.get("image_urls") or None,
         )
+        session.add(review)
         if source_id is not None:
-            existing_ids.add(source_id)
+            existing[source_id] = review
         saved += 1
 
     return saved
+
+
+def _fill_missing_media(review: Review, item: dict) -> None:
+    """Add photos to a review saved before photos were collected.
+
+    Only empty media fields are filled. Text, rating and everything else that
+    was already saved stays exactly as it was.
+    """
+    if not review.reviewer_avatar_url and item.get("avatar_url"):
+        review.reviewer_avatar_url = item["avatar_url"]
+    if not review.image_urls and item.get("image_urls"):
+        review.image_urls = item["image_urls"]
 
 
 def list_reviews_for_target(session: Session, target_id: int) -> list[Review]:
