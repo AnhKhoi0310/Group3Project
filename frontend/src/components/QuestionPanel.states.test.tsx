@@ -99,13 +99,28 @@ describe("QuestionPanel readiness (S2-020)", () => {
     expect(input()).toBeEnabled();
   });
 
-  it("stays usable when the review count is unknown", () => {
-    renderPanel({ reviewCount: null });
+  it("disables questions and displays an unavailable message when the review count is unknown", () => {
+    const api = renderPanel({ reviewCount: null });
 
-    expect(input()).toBeEnabled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "ReviewLens couldn't determine whether reviews are available for Joe's Pizza.",
+    );
+
+    expect(input()).toBeDisabled();
+
     expect(
-      screen.getByRole("list", { name: "What ReviewLens can answer" }),
-    ).toHaveTextContent("Google Maps reviews of Joe's Pizza");
+      screen.getByRole("button", { name: SUGGESTED_QUESTIONS[0] }),
+    ).toBeDisabled();
+
+    expect(
+      screen.getByRole("button", { name: "Ask ReviewLens" }),
+    ).toBeDisabled();
+
+    expect(
+      screen.queryByRole("list", { name: "What ReviewLens can answer" }),
+    ).not.toBeInTheDocument();
+
+    expect(api.request).not.toHaveBeenCalled();
   });
 });
 
