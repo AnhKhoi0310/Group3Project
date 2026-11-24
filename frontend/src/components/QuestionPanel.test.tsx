@@ -26,7 +26,14 @@ function answer(overrides: Partial<QuestionAnswer> = {}): QuestionAnswer {
 }
 
 function renderPanel(api = createFakeApi()) {
-  render(<QuestionPanel api={api} targetId="1" targetName="Example Cafe" />);
+  render(
+    <QuestionPanel
+      api={api}
+      targetId="1"
+      targetName="Example Cafe"
+      reviewCount={2}
+    />,
+  );
   return api;
 }
 

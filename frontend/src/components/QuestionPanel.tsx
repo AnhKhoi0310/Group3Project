@@ -35,8 +35,8 @@ interface Props {
   platformLabel?: string;
   /**
    * Saved reviews for this target. "loading" while it is being fetched; null
-   * when unknown, in which case questions stay available and the backend
-   * still refuses to answer without reviews.
+   * when the review count is unknown. Questions remain disabled until the
+   * dataset status is known.
    */
   reviewCount?: number | null | "loading";
   /** True while reviews are being collected for this target. */
@@ -234,7 +234,8 @@ export default function QuestionPanel({
 
   const checking = reviewCount === "loading";
   const noReviews = reviewCount === 0;
-  const ready = !collecting && !checking && !noReviews;
+  const unavailable = reviewCount === null;
+  const ready = !collecting && !checking && !noReviews && !unavailable;
   const asking = entries.some((entry) => entry.pending);
 
   useEffect(() => {
@@ -432,6 +433,17 @@ export default function QuestionPanel({
 
         {checking && !collecting && (
           <p className="text-sm text-slate-600">Checking the review dataset…</p>
+        )}
+
+        {unavailable && !collecting && (
+          <p
+            role="alert"
+            className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+          >
+            ReviewLens couldn't determine whether reviews are available for{" "}
+            {targetName}. Questions are temporarily unavailable. Please refresh
+            the page and try again.
+          </p>
         )}
 
         {ready && entries.length === 0 && (
