@@ -1,3 +1,5 @@
+// Sprint 2: S2-009 Q&A interface basics, S2-011/012 answer display.
+// Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ApiError } from "../api/client";
 import type { QuestionAnswer } from "../api/questions";
@@ -45,6 +47,7 @@ function ask(text: string) {
 }
 
 describe("QuestionPanel", () => {
+  // S2-009, S2-017: the chat names the active target
   it("names the active target", () => {
     renderPanel();
 
@@ -53,6 +56,7 @@ describe("QuestionPanel", () => {
     ).toBeVisible();
   });
 
+  // S2-009, S2-011: a question is sent and the answer shows with its evidence
   it("sends the trimmed question and shows the answer with its evidence", async () => {
     const api = createFakeApi();
     let resolve: (value: QuestionAnswer) => void = () => {};
@@ -90,6 +94,7 @@ describe("QuestionPanel", () => {
     ).toBeEnabled();
   });
 
+  // S2-012: insufficient evidence has its own label
   it("makes a lack of evidence clear", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue(
@@ -111,6 +116,7 @@ describe("QuestionPanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  // S2-020: no reviews shows its own message
   it("says when there are no successfully ingested reviews", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue(
@@ -138,6 +144,7 @@ describe("QuestionPanel", () => {
     expect(screen.queryByText(/^Based on/)).not.toBeInTheDocument();
   });
 
+  // S2-014, S2-015: declined questions are labeled out of scope
   it("labels a declined question as out of scope", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue(
@@ -156,6 +163,7 @@ describe("QuestionPanel", () => {
     );
   });
 
+  // S2-010: the answer says when only the newest reviews were used
   it("notes when only the most recent reviews were used", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue(
@@ -172,6 +180,7 @@ describe("QuestionPanel", () => {
     ).toBeVisible();
   });
 
+  // S2-009: a blank question isn't sent
   it("asks for a question instead of sending a blank one", () => {
     const api = renderPanel();
 
@@ -187,6 +196,7 @@ describe("QuestionPanel", () => {
     expect(api.request).not.toHaveBeenCalled();
   });
 
+  // S2-009: the server's validation message shows on the field
   it("shows the server's field message on the question", async () => {
     const api = createFakeApi();
     api.request.mockRejectedValue(
@@ -203,6 +213,7 @@ describe("QuestionPanel", () => {
     );
   });
 
+  // S2-009: a failed AI request shows a friendly error
   it("shows a friendly error when the AI request fails", async () => {
     const api = createFakeApi();
     api.request.mockRejectedValue(
@@ -221,6 +232,7 @@ describe("QuestionPanel", () => {
     ).toBeEnabled();
   });
 
+  // S2-009: unexpected failures show a generic message
   it("falls back to a generic message for unexpected failures", async () => {
     const api = createFakeApi();
     api.request.mockRejectedValue(new Error("boom"));
@@ -233,6 +245,7 @@ describe("QuestionPanel", () => {
     );
   });
 
+  // S2-011: long cited reviews are shortened
   it("shortens very long evidence reviews", async () => {
     const api = createFakeApi();
     const long = "a".repeat(400);

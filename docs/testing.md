@@ -93,3 +93,39 @@ Use them directly with `answer_question(...)` (see `test_s2_003_qa_harness.py`),
 - **Judge:** `evaluate_result(case, status, answer, cited_reviews)` decides whether a reply is acceptable from behavior, not wording. It checks that the reported disposition matches, that answers cite supplied reviews and mention the expected evidence, and that declined answers cite nothing.
 - **In CI:** `test_s2_004_scope_guard_evaluation.py` runs every case through the real Q&A service with controlled replies. It also checks that the judge rejects bad behavior, such as answering a general-knowledge question or guessing when evidence is missing.
 - **Against the live model:** the same cases and judge run with `python scripts/live_qa_eval.py` from `backend/`. It needs `ANTHROPIC_API_KEY`, makes one paid call per case, and isn't part of CI (S2-BR-031). Run it after changing the prompt or the model, and before the demo.
+
+## Sprint 2 test map
+
+Every Sprint 2 test has a one-line comment above it starting with its story ID, and each file opens with a short header. Search a story ID across `backend/tests` and `frontend/src` (in VS Code: Ctrl+Shift+F, for example `S2-016`) to list its tests. Tests marked `(demo)` are the ones to open during the demo. Extras that aren't a story use the tags `Photos:`, `Reviews:` and `Chat dock:`.
+
+| Story | What it covers | Backend (`backend/tests/`) | Frontend (`frontend/src/`) |
+|---|---|---|---|
+| S2-001 | Changed-code coverage gate | CI step in `.github/workflows/ci.yml` | Same workflow |
+| S2-002 | Integration tests | `test_s2_002_integration.py` | |
+| S2-003 | Deterministic Q&A harness | `fake_llm.py`, `test_s2_003_qa_harness.py` | |
+| S2-004 | Scope-guard evaluation set | `scope_evaluation_cases.py`, `test_s2_004_scope_guard_evaluation.py`, `scripts/live_qa_eval.py` | |
+| S2-005 | Ingestion status | `test_s2_009_012_review_qa.py` | `pages/TargetWorkspacePage.test.tsx` |
+| S2-006 | Review count and rating summary | `test_target_workspace_api.py`, `test_s2_002_integration.py` | `pages/TargetWorkspacePage.test.tsx` |
+| S2-007 | Skipped records | `test_s2_002_integration.py` | `pages/TargetWorkspacePage.test.tsx` |
+| S2-008 | Summary from the saved dataset | `test_target_workspace_api.py`, `test_s2_009_012_review_qa.py` | `pages/TargetWorkspacePage.test.tsx` |
+| S2-009 | Q&A interface | `test_s2_009_012_review_qa.py`, `test_llm_adapter.py` | `components/QuestionPanel.test.tsx`, `components/QuestionPanel.states.test.tsx` |
+| S2-010 | Review context for Q&A | `test_s2_009_012_review_qa.py`, `test_s2_003_qa_harness.py` | `components/QuestionPanel.test.tsx` |
+| S2-011 | Answers from review evidence | `test_s2_009_012_review_qa.py`, `test_llm_adapter.py` | `components/QuestionPanel*.test.tsx` |
+| S2-012 | Insufficient evidence | `test_s2_009_012_review_qa.py`, `test_s2_013_system_prompt.py` | `components/QuestionPanel*.test.tsx` |
+| S2-013 | System prompt | `test_s2_013_system_prompt.py` | |
+| S2-014 | Declining general knowledge | `test_s2_014_general_knowledge.py` | `components/QuestionPanel*.test.tsx` |
+| S2-015 | Declining other entities and platforms | `test_s2_015_entity_platform.py` | `components/QuestionPanel.test.tsx` |
+| S2-016 | Cross-user isolation in AI context | `test_s2_016_cross_user_isolation.py`, `test_s2_009_012_review_qa.py` | |
+| S2-017 | Switching the active target | | `components/TargetSwitcher.test.tsx` |
+| S2-018 | Q&A context follows the target | `test_s2_009_012_review_qa.py`, `test_s2_002_integration.py` | `pages/TargetSwitchFlow.test.tsx` |
+| S2-019 | No stale review context | `test_s2_009_012_review_qa.py`, `test_s2_003_qa_harness.py` | |
+| S2-020 | Target without review data | `test_s2_009_012_review_qa.py`, `test_s2_003_qa_harness.py` | `components/QuestionPanel.states.test.tsx`, `pages/TargetWorkspaceQA.test.tsx` |
+
+**Demo tests**, in the order the demo script uses them:
+
+1. `test_s2_002_integration.py` :: `test_qa_context_is_exactly_the_ingested_dataset`
+2. `test_s2_003_qa_harness.py` :: `test_controlled_model_response_is_returned_to_the_application`
+3. `test_s2_004_scope_guard_evaluation.py` :: `test_evaluation_case_through_the_qa_service`
+4. `test_s2_009_012_review_qa.py` :: `test_switching_targets_sends_only_the_new_targets_reviews`
+5. `test_s2_016_cross_user_isolation.py` :: `test_user_a_context_excludes_user_b_reviews`
+6. `frontend/src/pages/TargetSwitchFlow.test.tsx`

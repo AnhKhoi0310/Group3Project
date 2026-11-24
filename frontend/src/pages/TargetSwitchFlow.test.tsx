@@ -1,3 +1,5 @@
+// Sprint 2: S2-018 end-to-end target switch in the workspace (demo).
+// Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "../auth/AuthContext";
@@ -72,6 +74,7 @@ const ANSWER_B: QuestionAnswer = {
 };
 
 describe("Target switching flow (S2-018)", () => {
+  // S2-018 (demo): switching changes the target, summary and Q&A context
   it("switches the active target, summary, and subsequent Q&A context", async () => {
     const questionRequests: Array<{
       path: string;

@@ -1,3 +1,5 @@
+// Sprint 1: S1-018 workspace. Sprint 2: S2-005 to S2-008 status and summary (tagged below).
+// Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ApiError } from "../api/client";
@@ -106,6 +108,7 @@ async function openAndCollect(api: ReturnType<typeof createFakeApi>) {
 }
 
 describe("TargetWorkspacePage", () => {
+  // S2-005, S2-017: the header and status show the active target
   it("identifies the active target, platform, source and ingestion state", async () => {
     const api = apiWithState(null);
     renderPage(api);
@@ -190,6 +193,7 @@ describe("TargetWorkspacePage", () => {
 });
 
 describe("TargetWorkspacePage review collection", () => {
+  // S2-005, S2-007: collection shows Partial success when records are skipped
   it("starts ingestion for this target and shows a partial result when records are skipped", async () => {
     const api = apiWithIngestion(async () => RESULT_PARTIAL);
     await openAndCollect(api);
@@ -208,6 +212,7 @@ describe("TargetWorkspacePage review collection", () => {
     });
   });
 
+  // S2-007: skipped reasons are reported clearly
   it("reports malformed records, duplicate reviews, and singular skipped counts clearly", async () => {
     const api = apiWithState({
       target_id: 1,
@@ -228,6 +233,7 @@ describe("TargetWorkspacePage review collection", () => {
     ).toBeVisible();
   });
 
+  // S2-005, S2-020: zero usable reviews shows Partial success
   it("displays Partial success and explains that ingestion must succeed when there are zero usable reviews", async () => {
     const api = apiWithState(RESULT_EMPTY);
     renderPage(api);
@@ -242,6 +248,7 @@ describe("TargetWorkspacePage review collection", () => {
     ).toBeVisible();
   });
 
+  // S2-005: a failed collection keeps earlier reviews available
   it("explains that previously saved reviews remain available when the latest ingestion attempt fails", async () => {
     const api = apiWithState({
       target_id: 1,
@@ -267,6 +274,7 @@ describe("TargetWorkspacePage review collection", () => {
     );
   });
 
+  // S2-005: the button is disabled while collecting
   it("disables the button and explains the wait while collecting", async () => {
     const api = apiWithIngestion(() => new Promise(() => {}));
     await openAndCollect(api);
@@ -277,6 +285,7 @@ describe("TargetWorkspacePage review collection", () => {
     expect(screen.getByText(/Ingestion is currently running/)).toBeVisible();
   });
 
+  // S2-005: a failed collection shows the backend's friendly message
   it("shows the backend's friendly message when collection fails", async () => {
     const api = apiWithIngestion(async () => {
       throw new ApiError(
@@ -311,6 +320,7 @@ describe("TargetWorkspacePage review collection", () => {
 });
 
 describe("TargetWorkspacePage review summary", () => {
+  // S2-006: the summary shows count, average and distribution
   it("displays the review count, average rating, and rating distribution for the active target", async () => {
     const api = apiWithState(RESULT_SUCCEEDED, undefined, POPULATED_SUMMARY);
     renderPage(api);
@@ -331,6 +341,7 @@ describe("TargetWorkspacePage review summary", () => {
     expect(screen.getByText("3 ★").nextSibling).toHaveTextContent("1");
   });
 
+  // S2-006: zero reviews shows no ratings yet
   it("shows zero reviews and no ratings yet when no reviews have been ingested", async () => {
     const api = apiWithState(null, undefined, EMPTY_SUMMARY);
     renderPage(api);
@@ -343,6 +354,7 @@ describe("TargetWorkspacePage review summary", () => {
     );
   });
 
+  // S2-006: a failed summary shows a safe error
   it("shows a safe error message if the review summary fails to load", async () => {
     const api = createFakeApi();
     api.request.mockImplementation(async (path: string) => {
@@ -367,6 +379,7 @@ describe("TargetWorkspacePage review summary", () => {
     expect(screen.queryByText(/secret-db/)).not.toBeInTheDocument();
   });
 
+  // S2-008: the summary refreshes from saved data after collection
   it("refreshes the summary from persisted backend data after ingestion completes", async () => {
     let currentSummary: ReviewSummary = EMPTY_SUMMARY;
     const api = createFakeApi();
@@ -407,6 +420,7 @@ describe("TargetWorkspacePage review summary", () => {
     );
   });
 
+  // S2-008, S2-018: the summary updates cleanly on target switch
   it("updates the summary cleanly when switching to a different active target", async () => {
     const targetTwo = {
       ...TARGET,

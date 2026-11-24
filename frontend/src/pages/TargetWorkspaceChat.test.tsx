@@ -1,3 +1,5 @@
+// Sprint 2 extra: the docked chat in the workspace (tag: Chat dock).
+// Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { QuestionAnswer } from "../api/questions";
@@ -87,6 +89,7 @@ afterEach(() => {
   delete window.matchMedia;
 });
 
+// Chat dock: docked beside the workspace; hide and reopen
 it("docks the chat beside the workspace, hides it and brings it back", async () => {
   renderWorkspace();
   expect(
@@ -109,6 +112,7 @@ it("docks the chat beside the workspace, hides it and brings it back", async () 
   ).not.toBeInTheDocument();
 });
 
+// Chat dock: width is remembered and clamped
 it("remembers the chat width and ignores broken saved settings", async () => {
   localStorage.setItem(
     "reviewlens.chat",
@@ -123,6 +127,7 @@ it("remembers the chat width and ignores broken saved settings", async () => {
   expect(JSON.parse(localStorage.getItem("reviewlens.chat")!).width).toBe(696);
 });
 
+// Chat dock: unreadable saved settings fall back to defaults
 it("falls back to defaults when saved settings are unreadable", async () => {
   localStorage.setItem("reviewlens.chat", "{not json");
   renderWorkspace();
@@ -132,6 +137,7 @@ it("falls back to defaults when saved settings are unreadable", async () => {
   ).toHaveAttribute("aria-valuenow", "420");
 });
 
+// Chat dock: Show in reviews jumps to the review list
 it("jumps from a cited review to the review list", async () => {
   mockScreen(true);
   const jumps: number[] = [];
@@ -154,6 +160,7 @@ it("jumps from a cited review to the review list", async () => {
   }
 });
 
+// Chat dock: starts closed on small screens and steps aside
 it("starts closed on small screens and steps aside when jumping to a review", async () => {
   mockScreen(false);
   renderWorkspace();

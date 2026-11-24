@@ -1,3 +1,5 @@
+// Sprint 2 extra: avatars, photo viewer and gallery (tag: Photos); S2-020 review count.
+// Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { ApiError } from "../api/client";
 import type { Review } from "../api/reviews";
@@ -28,12 +30,14 @@ function review(id: number, overrides: Partial<Review> = {}): Review {
 }
 
 describe("Avatar", () => {
+  // Photos: shows the reviewer's picture
   it("shows the profile picture", () => {
     render(<Avatar name="Ana Lee" src={photo(9)} />);
 
     expect(screen.getByTestId("avatar-image")).toHaveAttribute("src", photo(9));
   });
 
+  // Photos: falls back to initials
   it("falls back to initials when the picture fails or is missing", () => {
     const { rerender } = render(<Avatar name="Ana Lee" src={photo(9)} />);
     fireEvent.error(screen.getByTestId("avatar-image"));
@@ -43,6 +47,7 @@ describe("Avatar", () => {
     expect(screen.getByTestId("avatar-initials")).toHaveTextContent("A");
   });
 
+  // Photos: initials and colors are stable
   it("builds stable initials and colors", () => {
     expect(initials("  joe's   pizza place ")).toBe("JP");
     expect(initials("   ")).toBe("?");
@@ -56,6 +61,7 @@ describe("PhotoLightbox", () => {
     caption: `Photo ${n}`,
   }));
 
+  // Photos: the viewer moves with buttons and arrow keys; Escape closes
   it("moves with buttons and arrow keys and closes with Escape", () => {
     const onClose = vi.fn();
     const onNavigate = vi.fn();
@@ -79,6 +85,7 @@ describe("PhotoLightbox", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  // Photos: clicking outside the photo closes the viewer
   it("closes when the backdrop is clicked but not the photo", () => {
     const onClose = vi.fn();
     render(
@@ -97,6 +104,7 @@ describe("PhotoLightbox", () => {
     expect(screen.queryByRole("button", { name: "Next photo" })).toBeNull();
   });
 
+  // Photos: the viewer renders nothing for a bad index
   it("renders nothing for an index outside the list", () => {
     const { container } = render(
       <PhotoLightbox
@@ -112,6 +120,7 @@ describe("PhotoLightbox", () => {
 });
 
 describe("PlaceGallery", () => {
+  // Photos: the gallery takes up to 24 photos from reviews
   it("collects photos from reviews, capped at 24", () => {
     const reviews = [
       review(1, { image_urls: Array.from({ length: 20 }, (_, i) => photo(i)) }),
@@ -127,6 +136,7 @@ describe("PlaceGallery", () => {
     expect(photos[0].caption).toBe("Reviewer 1, 4 out of 5");
   });
 
+  // Photos: the gallery shows photos and opens them full size
   it("shows customer photos and opens them full size", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue([
@@ -157,6 +167,7 @@ describe("PlaceGallery", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  // Photos: initials tile when there are no photos
   it("shows a lettered tile when there are no photos or they can't load", async () => {
     const api = createFakeApi();
     api.request.mockRejectedValue(new ApiError(500, "unexpected", "nope"));
@@ -175,6 +186,7 @@ describe("PlaceGallery", () => {
 });
 
 describe("ReviewList media", () => {
+  // Photos: reviews show avatars and open their photos
   it("shows avatars and opens a review's photos", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue([
@@ -211,6 +223,7 @@ describe("ReviewSummaryCard review count", () => {
     rating_distribution: { "1": 0, "2": 1, "3": 1, "4": 2, "5": 3 },
   };
 
+  // S2-020: the summary card reports the review count to the chat
   it("reports the loaded count", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue(summary);
@@ -229,6 +242,7 @@ describe("ReviewSummaryCard review count", () => {
     expect(onReviewCount).toHaveBeenLastCalledWith(7);
   });
 
+  // S2-020: the count is unknown after an error or a mismatched summary
   it.each([
     [
       "a failed request",

@@ -1,3 +1,6 @@
+# Sprint 2: S2-002 integration tests (ingestion -> DB -> summary -> Q&A).
+# Demo: test_qa_context_is_exactly_the_ingested_dataset
+# Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 """Integration tests across ingestion, persistence, summary and Q&A (S2-002).
 
 Each test drives the real API with only the two external services faked: the
@@ -25,6 +28,7 @@ PROVIDER_RECORDS = [
 VALID_TEXTS = [record["snippet"] for record in PROVIDER_RECORDS[:4]]
 
 
+# S2-002: ingested reviews can be read back through the API
 def test_persisted_reviews_can_be_retrieved(client, fetcher):
     target = s1_helpers.create_target(client)
 
@@ -50,6 +54,7 @@ def test_persisted_reviews_can_be_retrieved(client, fetcher):
     assert {r["rating"] for r in reviews} == {3, 5}
 
 
+# S2-002, S2-007: ingestion counts saved and skipped records correctly
 def test_ingestion_summary_matches_persisted_reviews(client, fetcher):
     target = s1_helpers.create_target(client)
 
@@ -77,6 +82,7 @@ def test_ingestion_summary_matches_persisted_reviews(client, fetcher):
     assert len(reviews.json()) == 2
 
 
+# S2-002, S2-016: another user gets the same 404 as a missing target
 def test_ownership_is_checked_before_review_retrieval(client, fetcher):
     target = s1_helpers.create_target(client, token="token-a")
 
@@ -104,6 +110,7 @@ def test_ownership_is_checked_before_review_retrieval(client, fetcher):
     assert foreign_response.json() == missing_response.json()
 
 
+# S2-002, S2-018: each target returns only its own reviews
 def test_switching_targets_returns_different_reviews(client, fetcher):
     target_a = s1_helpers.create_target(client, "Target A")
     target_b = s1_helpers.create_target(client, "Target B")
@@ -160,6 +167,7 @@ def ingest(client, fetcher, target_id, records):
     return response.json()
 
 
+# S2-002, S2-006: summary count, average and distribution match the saved reviews
 def test_summary_is_computed_from_the_ingested_reviews(client, fetcher):
     target = s1_helpers.create_target(client, "Phone X")
 
@@ -173,6 +181,7 @@ def test_summary_is_computed_from_the_ingested_reviews(client, fetcher):
     assert summary["rating_distribution"] == {"1": 0, "2": 1, "3": 0, "4": 2, "5": 1}
 
 
+# S2-002, S2-010 (demo): model context = the saved reviews; skipped ones stay out
 def test_qa_context_is_exactly_the_ingested_dataset(client, fetcher, llm):
     target = s1_helpers.create_target(client, "Phone X")
     ingest(client, fetcher, target["id"], PROVIDER_RECORDS)
@@ -188,6 +197,7 @@ def test_qa_context_is_exactly_the_ingested_dataset(client, fetcher, llm):
     assert answer["reviews_total"] == summary["review_count"]
 
 
+# S2-002, S2-005: a failed re-collection leaves the summary and Q&A data unchanged
 def test_failed_reingestion_keeps_the_summary_and_qa_dataset(client, fetcher, llm):
     target = s1_helpers.create_target(client, "Phone X")
     ingest(client, fetcher, target["id"], PROVIDER_RECORDS[:2])
@@ -204,6 +214,7 @@ def test_failed_reingestion_keeps_the_summary_and_qa_dataset(client, fetcher, ll
     assert "Battery life is superb." in llm.last_request["user_prompt"]
 
 
+# S2-002, S2-016: User B is denied the summary and Q&A; the model is never called
 def test_another_user_cannot_read_the_summary_or_ask_questions(client, fetcher, llm):
     target = s1_helpers.create_target(client, "Phone X", token="token-a")
     ingest(client, fetcher, target["id"], PROVIDER_RECORDS)
@@ -218,6 +229,7 @@ def test_another_user_cannot_read_the_summary_or_ask_questions(client, fetcher, 
     assert llm.call_count == 0
 
 
+# S2-002, S2-018: switching changes both the summary and the model context
 def test_switching_targets_switches_summary_and_qa_context(client, fetcher, llm):
     phone = s1_helpers.create_target(client, "Phone X")
     store = s1_helpers.create_target(client, "Corner Store")

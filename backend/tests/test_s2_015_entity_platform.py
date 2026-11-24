@@ -1,3 +1,5 @@
+# Sprint 2: S2-015 declining questions about other businesses or review platforms.
+# Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -13,6 +15,7 @@ def clear_database():
     yield
 
 
+# S2-015: other-business questions are sent with scope instructions
 @pytest.mark.parametrize(
     "question",
     [
@@ -33,6 +36,7 @@ def test_other_entity_questions_receive_scope_instructions(question):
     assert question not in prompt
 
 
+# S2-015: other-platform questions are sent with scope instructions
 @pytest.mark.parametrize(
     "question",
     [
@@ -53,6 +57,7 @@ def test_other_platform_questions_receive_scope_instructions(question):
     assert question not in prompt
 
 
+# S2-015: a business named in a review isn't evidence about that business
 def test_entity_mentions_do_not_establish_evidence():
     prompt = _build_system_prompt(
         target_name="Northside Cafe",
@@ -63,6 +68,7 @@ def test_entity_mentions_do_not_establish_evidence():
     assert "because its name appears in a review" in prompt
 
 
+# S2-015: the prompt names the current target
 def test_prompt_changes_with_active_target():
     first = _build_system_prompt("Northside Cafe", "google_maps")
     second = _build_system_prompt("Riverside Restaurant", "yelp")
@@ -74,6 +80,7 @@ def test_prompt_changes_with_active_target():
     assert "yelp" in second
 
 
+# S2-015: an other-business question still carries only the active target
 def test_other_entity_question_sends_active_target_to_model():
     target = SimpleNamespace(
         id=1,
@@ -122,6 +129,7 @@ def test_other_entity_question_sends_active_target_to_model():
     assert result.answer == llm.response
 
 
+# S2-015: an other-platform question carries the active platform
 def test_other_platform_question_sends_platform_to_model():
     target = SimpleNamespace(
         id=2,

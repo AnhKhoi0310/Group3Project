@@ -1,3 +1,5 @@
+// Sprint 2: S2-020 empty target in the full workspace.
+// Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "../auth/AuthContext";
@@ -23,6 +25,7 @@ function summary(count: number) {
 }
 
 /** S2-020: a target without reviews can't be asked questions until collection. */
+// S2-020 (demo extra): questions open only after reviews are collected
 it("opens questions only after reviews are collected from the empty state", async () => {
   let collected = false;
   const api = createFakeApi();
