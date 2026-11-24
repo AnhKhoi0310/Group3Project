@@ -1,3 +1,5 @@
+// Sprint 2 extra: review explorer (tag: Reviews) and chat dock (tag: Chat dock).
+// Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { Review } from "../api/reviews";
 import { createFakeApi } from "../test/fakeAuth";
@@ -54,6 +56,7 @@ const listedTexts = () =>
     .map((item) => item.querySelector("p.whitespace-pre-line")?.textContent);
 
 describe("Review explorer", () => {
+  // Reviews: search finds text and reviewer names and highlights matches
   it("searches text and reviewer names and highlights the matches", async () => {
     await renderExplorer();
 
@@ -75,6 +78,7 @@ describe("Review explorer", () => {
     ]);
   });
 
+  // Reviews: star filters narrow the list and toggle off
   it("filters by star rating and toggles the filter off", async () => {
     await renderExplorer();
     const fiveStar = screen.getByRole("button", { name: "5-star reviews (1)" });
@@ -94,6 +98,7 @@ describe("Review explorer", () => {
     expect(screen.getByText("Showing 4 of 4 reviews")).toBeVisible();
   });
 
+  // Reviews: sort by rating or photos
   it("sorts by rating and by photos", async () => {
     await renderExplorer();
     const sort = screen.getByLabelText("Sort by");
@@ -111,6 +116,7 @@ describe("Review explorer", () => {
     expect(listedTexts()[0]).toBe("Crispy crust and great sauce.");
   });
 
+  // Reviews: no matches explains and clears the filters
   it("explains when nothing matches and clears the filters", async () => {
     await renderExplorer();
     fireEvent.click(screen.getByRole("button", { name: "2-star reviews (1)" }));
@@ -128,6 +134,7 @@ describe("Review explorer", () => {
     expect(screen.getByLabelText("Search reviews")).toHaveValue("");
   });
 
+  // Reviews: Show in reviews jumps to a review and clears hiding filters
   it("jumps to a review from the chat, clearing filters that hide it", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const scrollIntoView = vi.fn();
@@ -154,6 +161,7 @@ describe("Review explorer", () => {
     }
   });
 
+  // Reviews: search terms with symbols match literally
   it("highlights special characters literally", () => {
     render(
       <p>
@@ -198,6 +206,7 @@ describe("ChatDock", () => {
     return { onResize, onClose };
   }
 
+  // Chat dock: arrow keys resize within limits
   it("resizes with the keyboard, clamped to its limits", () => {
     const { onResize } = renderDock();
     const handle = screen.getByRole("separator", { name: "Resize chat" });
@@ -218,6 +227,7 @@ describe("ChatDock", () => {
     ]);
   });
 
+  // Chat dock: dragging the edge resizes
   it("resizes by dragging the left edge", () => {
     const { onResize } = renderDock();
     const handle = screen.getByRole("separator", { name: "Resize chat" });
@@ -232,6 +242,7 @@ describe("ChatDock", () => {
     expect(onResize.mock.calls).toEqual([[DEFAULT_WIDTH + 100], [MAX_WIDTH]]);
   });
 
+  // Chat dock: a closed chat is hidden from screen readers
   it("hides its content from assistive technology when closed", () => {
     renderDock({ open: false });
 
@@ -240,6 +251,7 @@ describe("ChatDock", () => {
     expect(dock).toHaveAttribute("data-open", "false");
   });
 
+  // Chat dock: clicking the backdrop closes it
   it("closes when the backdrop is clicked", () => {
     const { onClose } = renderDock();
 

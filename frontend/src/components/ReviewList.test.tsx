@@ -1,3 +1,5 @@
+// Sprint 1: S1-022 saved reviews. Sprint 2 extra: scrolling list (tagged below).
+// Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 import { render, screen } from "@testing-library/react";
 import { ApiError } from "../api/client";
 import type { Review } from "../api/reviews";
@@ -47,6 +49,7 @@ describe("ReviewList", () => {
     expect(screen.getByText("Anonymous")).toBeVisible();
   });
 
+  // Reviews: every review lists in a scrolling panel
   it("lists every review inside its own scrolling panel", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue(

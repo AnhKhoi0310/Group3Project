@@ -1,3 +1,6 @@
+# Sprint 2: S2-003 deterministic Q&A harness, using FakeLLM from fake_llm.py.
+# Demo: test_controlled_model_response_is_returned_to_the_application
+# Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 import pytest
 from fake_llm import FakeLLM
 
@@ -60,6 +63,7 @@ def create_review(
     return review
 
 
+# S2-003, S2-013: the system prompt sent to the model defines ReviewLens's scope
 def test_system_instructions_define_the_reviewlens_scope(db):
     user = create_user(db, "scope-test-user")
     target = create_target(db, user.id, "Northside Cafe")
@@ -92,6 +96,7 @@ def test_system_instructions_define_the_reviewlens_scope(db):
     assert "untrusted data" in system_prompt
 
 
+# S2-003, S2-010: only the active target's reviews reach the model
 def test_only_reviews_from_the_active_target_enter_model_context(db):
     user = create_user(db, "same-owner-user")
 
@@ -132,6 +137,7 @@ def test_only_reviews_from_the_active_target_enter_model_context(db):
     assert "WRONG_TARGET_REVIEW_B" not in user_prompt
 
 
+# S2-003, S2-019: each question rebuilds context; nothing is carried over
 def test_switching_targets_builds_fresh_context(db):
     user = create_user(db, "target-switch-user")
 
@@ -176,6 +182,7 @@ def test_switching_targets_builds_fresh_context(db):
     assert llm.call_count == 2
 
 
+# S2-003, S2-016: another user's reviews never reach the model
 def test_reviews_from_another_users_target_are_never_sent_to_the_model(db):
     owner_a = create_user(db, "owner-a")
     owner_b = create_user(db, "owner-b")
@@ -207,6 +214,7 @@ def test_reviews_from_another_users_target_are_never_sent_to_the_model(db):
     assert llm.requests == []
 
 
+# S2-003, S2-020: no reviews means no model call
 def test_target_without_reviews_does_not_call_the_model(db):
     user = create_user(db, "empty-target-user")
     target = create_target(db, user.id, "Empty Target")
@@ -228,6 +236,7 @@ def test_target_without_reviews_does_not_call_the_model(db):
     assert llm.call_count == 0
 
 
+# S2-003, S2-020: reviews without a successful collection don't get a normal answer
 def test_reviews_without_successful_ingestion_do_not_produce_a_normal_answer(db):
     user = create_user(db, "un-ingested-target-user")
     target = create_target(db, user.id, "Not Ingested Target")
@@ -254,6 +263,7 @@ def test_reviews_without_successful_ingestion_do_not_produce_a_normal_answer(db)
     assert llm.call_count == 0
 
 
+# S2-003 (demo): a fixed fake reply flows back to the app unchanged
 def test_controlled_model_response_is_returned_to_the_application(db):
     user = create_user(db, "controlled-response-user")
     target = create_target(db, user.id, "Controlled Response Cafe")
@@ -279,6 +289,7 @@ def test_controlled_model_response_is_returned_to_the_application(db):
     assert llm.call_count == 1
 
 
+# S2-003, S2-009: a blank question never reaches the model
 def test_empty_question_is_rejected_without_calling_the_model(db):
     user = create_user(db, "empty-question-user")
     target = create_target(db, user.id, "Question Validation Cafe")

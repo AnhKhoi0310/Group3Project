@@ -1,3 +1,5 @@
+// Sprint 2: S2-020 chat readiness and S2-009 chat interactions.
+// Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { ApiError } from "../api/client";
 import type { QuestionAnswer } from "../api/questions";
@@ -48,6 +50,7 @@ function renderPanel(
 const input = () => screen.getByLabelText("Your question");
 
 describe("QuestionPanel readiness (S2-020)", () => {
+  // S2-020: no reviews disables questions and offers Collect reviews
   it("turns questions off and offers collection when there are no reviews", () => {
     const onCollect = vi.fn();
     const api = renderPanel({ reviewCount: 0, onCollect });
@@ -69,6 +72,7 @@ describe("QuestionPanel readiness (S2-020)", () => {
     expect(api.request).not.toHaveBeenCalled();
   });
 
+  // S2-020: questions stay off while collecting
   it("keeps questions off while reviews are being collected", () => {
     renderPanel({ reviewCount: 0, collecting: true });
 
@@ -81,6 +85,7 @@ describe("QuestionPanel readiness (S2-020)", () => {
     ).not.toBeInTheDocument();
   });
 
+  // S2-020: questions wait for the review count
   it("waits for the review count before allowing questions", () => {
     renderPanel({ reviewCount: "loading" });
 
@@ -88,6 +93,7 @@ describe("QuestionPanel readiness (S2-020)", () => {
     expect(input()).toBeDisabled();
   });
 
+  // S2-009: the chat shows its scope once reviews exist
   it("shows what it can and can't answer once reviews exist", () => {
     renderPanel({ reviewCount: 1, platformLabel: "Google Maps" });
 
@@ -99,6 +105,7 @@ describe("QuestionPanel readiness (S2-020)", () => {
     expect(input()).toBeEnabled();
   });
 
+  // S2-020: an unknown review count disables questions
   it("disables questions and displays an unavailable message when the review count is unknown", () => {
     const api = renderPanel({ reviewCount: null });
 
@@ -125,6 +132,7 @@ describe("QuestionPanel readiness (S2-020)", () => {
 });
 
 describe("QuestionPanel interactions", () => {
+  // S2-009: a suggested question asks in one click
   it("asks a suggested question with one click", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue(answer());
@@ -145,6 +153,7 @@ describe("QuestionPanel interactions", () => {
     );
   });
 
+  // S2-009: Enter asks; Shift+Enter adds a line
   it("asks with Enter and keeps Shift+Enter for new lines", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue(answer());
@@ -163,6 +172,7 @@ describe("QuestionPanel interactions", () => {
     expect(screen.getByText("What about the crust?")).toBeVisible();
   });
 
+  // S2-009: a character counter shows the limit
   it("counts characters as you type", () => {
     renderPanel();
 
@@ -171,6 +181,7 @@ describe("QuestionPanel interactions", () => {
     expect(screen.getByText("5 / 1000")).toBeVisible();
   });
 
+  // S2-009: questions list in order and can be cleared
   it("lists questions in conversation order and can clear them", async () => {
     const api = createFakeApi();
     api.request
@@ -196,6 +207,7 @@ describe("QuestionPanel interactions", () => {
     expect(screen.queryByTestId("qa-result")).not.toBeInTheDocument();
   });
 
+  // S2-009: a service failure is its own outcome, with Try again
   it("shows a service failure as its own outcome and retries it", async () => {
     const api = createFakeApi();
     api.request
@@ -226,6 +238,7 @@ describe("QuestionPanel interactions", () => {
     expect(api.request).toHaveBeenCalledTimes(2);
   });
 
+  // S2-009: a rejected question is put back for editing
   it("puts the question back when the server rejects it", async () => {
     const api = createFakeApi();
     api.request.mockRejectedValue(
@@ -245,6 +258,7 @@ describe("QuestionPanel interactions", () => {
     expect(screen.queryByText("Your questions about Joe's Pizza")).toBeNull();
   });
 
+  // S2-011: an answer can be copied
   it("copies an answer", async () => {
     const writeText = vi.fn(async () => {});
     Object.assign(navigator, { clipboard: { writeText } });
@@ -264,6 +278,7 @@ describe("QuestionPanel interactions", () => {
     expect(screen.getByRole("button", { name: "Copied" })).toBeVisible();
   });
 
+  // S2-011: three cited reviews show first, the rest on request
   it("shows three cited reviews first and the rest on request", async () => {
     const api = createFakeApi();
     const evidence = [1, 2, 3, 4, 5].map((id) => ({
@@ -289,6 +304,7 @@ describe("QuestionPanel interactions", () => {
     expect(screen.queryByText("Cited review 5")).not.toBeInTheDocument();
   });
 
+  // Photos: a cited review's photo opens full size
   it("opens a cited review's photo full size", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue(answer());
@@ -308,6 +324,7 @@ describe("QuestionPanel interactions", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  // S2-012, S2-014: each outcome has its own icon and label
   it("marks declined and insufficient-evidence outcomes with icons and labels", async () => {
     const api = createFakeApi();
     api.request

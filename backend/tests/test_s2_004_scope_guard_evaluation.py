@@ -1,3 +1,6 @@
+# Sprint 2: S2-004 scope-guard evaluation set (cases in scope_evaluation_cases.py).
+# Demo: test_evaluation_case_through_the_qa_service. Live run: scripts/live_qa_eval.py
+# Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 """Scope-guard evaluation set (S2-004).
 
 The cases live in scope_evaluation_cases.py and cover in-scope questions,
@@ -64,12 +67,14 @@ def controlled_reply(case, reviews):
 # The evaluation set itself
 
 
+# S2-004: all five question categories are in the set
 def test_all_required_categories_are_present():
     categories = {case["category"] for case in SCOPE_EVALUATION_CASES}
 
     assert REQUIRED_SCOPE_CATEGORIES.issubset(categories)
 
 
+# S2-004: each category has at least two questions
 def test_every_required_category_has_multiple_examples():
     for category in REQUIRED_SCOPE_CATEGORIES:
         matching = [c for c in SCOPE_EVALUATION_CASES if c["category"] == category]
@@ -77,15 +82,18 @@ def test_every_required_category_has_multiple_examples():
         assert len(matching) >= 2
 
 
+# S2-004: case IDs are unique
 def test_case_ids_are_unique():
     assert len(CASE_IDS) == len(set(CASE_IDS))
 
 
+# S2-004: each category expects the right outcome
 def test_each_category_has_the_correct_expected_disposition():
     for case in SCOPE_EVALUATION_CASES:
         assert case["expected_disposition"] == EXPECTED_DISPOSITIONS[case["category"]]
 
 
+# S2-004: every case has an ID, a question, a reply, and evidence words where needed
 def test_evaluation_cases_have_valid_structure():
     for case in SCOPE_EVALUATION_CASES:
         assert case["id"].strip()
@@ -101,6 +109,7 @@ def test_evaluation_cases_have_valid_structure():
 # The judge
 
 
+# S2-004: the judge accepts the correct outcome for every case
 @pytest.mark.parametrize("case", SCOPE_EVALUATION_CASES, ids=CASE_IDS)
 def test_expected_behavior_is_accepted(case):
     status = APP_STATUS[case["expected_disposition"]]
@@ -109,6 +118,7 @@ def test_expected_behavior_is_accepted(case):
     assert evaluate_result(case, status, case["controlled_response"], cited) == []
 
 
+# S2-004, S2-014: the judge flags an answered general-knowledge question
 def test_answering_a_general_knowledge_question_is_rejected():
     case = case_by_category("general_knowledge")
 
@@ -117,6 +127,7 @@ def test_answering_a_general_knowledge_question_is_rejected():
     assert "expected declined, got answered" in problems
 
 
+# S2-004, S2-012: the judge flags a guess where evidence is missing
 def test_guessing_instead_of_reporting_missing_evidence_is_rejected():
     case = case_by_category("insufficient_evidence")
 
@@ -125,6 +136,7 @@ def test_guessing_instead_of_reporting_missing_evidence_is_rejected():
     assert "expected insufficient_evidence, got answered" in problems
 
 
+# S2-004, S2-011: the judge flags an answer with no cited reviews
 def test_answer_without_review_evidence_is_rejected():
     case = case_by_category("in_scope")
 
@@ -134,6 +146,7 @@ def test_answer_without_review_evidence_is_rejected():
     assert "answer mentions none of the expected evidence" in problems
 
 
+# S2-004, S2-015: the judge flags a decline that cites reviews
 def test_declined_answer_that_cites_reviews_is_rejected():
     case = case_by_category("another_platform")
 
@@ -142,12 +155,14 @@ def test_declined_answer_that_cites_reviews_is_rejected():
     assert problems == ["a declined question cites reviews"]
 
 
+# S2-004: the judge flags an empty reply
 def test_empty_reply_is_rejected():
     case = case_by_category("another_entity")
 
     assert evaluate_result(case, "declined", "  ", 0) == ["empty answer"]
 
 
+# S2-004: the judge accepts different wording; no exact sentence is required
 def test_different_wording_is_accepted():
     case = case_by_category("in_scope")
 
@@ -157,6 +172,7 @@ def test_different_wording_is_accepted():
 # Each case through the real orchestration path
 
 
+# S2-004 (demo): every case runs through the real Q&A service and passes the judge
 @pytest.mark.parametrize("case", SCOPE_EVALUATION_CASES, ids=CASE_IDS)
 def test_evaluation_case_through_the_qa_service(db, case):
     user, target, reviews = create_evaluation_dataset(db)

@@ -1,3 +1,6 @@
+# Sprint 2: S2-016 cross-user data never enters AI context.
+# Demo: test_user_a_context_excludes_user_b_reviews ("PURPLE PENGUIN GALAXY 8472")
+# Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 import pytest
 
 from app.models import AnalysisTarget, IngestionAttempt, Review, User
@@ -80,6 +83,7 @@ def two_user_datasets(db):
     return user_a, target_a, user_b, target_b
 
 
+# S2-016: User B can't open User A's target
 def test_user_b_cannot_access_user_a_target(db, two_user_datasets):
     user_a, target_a, user_b, target_b = two_user_datasets
     llm = CapturingLLM()
@@ -96,6 +100,7 @@ def test_user_b_cannot_access_user_a_target(db, two_user_datasets):
     assert llm.calls == []
 
 
+# S2-016: User A's reviews never reach User B's model context
 def test_user_b_context_excludes_user_a_reviews(db, two_user_datasets):
     user_a, target_a, user_b, target_b = two_user_datasets
     llm = CapturingLLM()
@@ -123,6 +128,7 @@ def test_user_b_context_excludes_user_a_reviews(db, two_user_datasets):
     assert USER_A_SECRET not in result.answer
 
 
+# S2-016 (demo): User B's phrase never reaches User A's model context
 def test_user_a_context_excludes_user_b_reviews(db, two_user_datasets):
     user_a, target_a, user_b, target_b = two_user_datasets
     llm = CapturingLLM()

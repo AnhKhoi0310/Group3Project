@@ -1,3 +1,5 @@
+// Sprint 2: S2-017 switching the active target.
+// Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 import { fireEvent, render, screen } from "@testing-library/react";
 import {
   MemoryRouter,
@@ -68,6 +70,7 @@ function renderSwitcher(api = createFakeApi()) {
 }
 
 describe("TargetSwitcher", () => {
+  // S2-017: the switcher lists the user's own targets
   it("loads and displays the authenticated user's targets", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue(TARGETS);
@@ -91,6 +94,7 @@ describe("TargetSwitcher", () => {
     expect(api.request).toHaveBeenCalledWith("/api/targets");
   });
 
+  // S2-017: choosing a target opens it
   it("navigates to the selected owned target", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue(TARGETS);
@@ -114,6 +118,7 @@ describe("TargetSwitcher", () => {
     );
   });
 
+  // S2-017: only the user's own targets are offered
   it("does not offer targets that are absent from the user's target list", async () => {
     const api = createFakeApi();
     api.request.mockResolvedValue([TARGETS[0]]);
@@ -133,6 +138,7 @@ describe("TargetSwitcher", () => {
     ).toBeInTheDocument();
   });
 
+  // S2-017: the active target stays visible if the list fails
   it("keeps the active target visible if loading the target list fails", async () => {
     const api = createFakeApi();
     api.request.mockRejectedValue(new Error("Network failure"));

@@ -1,3 +1,5 @@
+# Sprint 1: S1-018 opening a target. Sprint 2: S2-006, S2-008 summary (tagged below).
+# Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 """GET /api/targets/{id} against real MySQL. Needs TEST_DATABASE_URL."""
 
 import pytest
@@ -122,6 +124,7 @@ def test_open_database_failure_returns_a_safe_error(client, db, monkeypatch):
     assert "db host down" not in response.text
 
 
+# S2-006: the summary is computed from saved reviews
 def test_owner_can_get_review_summary_from_persisted_reviews(client, db):
     target = make_target(client, "token-a", "A cafe")
     db.add_all(
@@ -167,6 +170,7 @@ def test_owner_can_get_review_summary_from_persisted_reviews(client, db):
     }
 
 
+# S2-006, S2-020: an empty target shows zero reviews and no average
 def test_empty_target_summary_returns_zero_count_and_null_average(client, db):
     target = make_target(client, "token-a", "Empty cafe")
 
@@ -184,6 +188,7 @@ def test_empty_target_summary_returns_zero_count_and_null_average(client, db):
     }
 
 
+# S2-008: another user's summary is denied
 def test_another_users_target_summary_is_denied(client, db):
     target = make_target(client, "token-a", "A cafe")
 
@@ -196,6 +201,7 @@ def test_another_users_target_summary_is_denied(client, db):
     assert "A cafe" not in response.text
 
 
+# S2-008: the summary requires login
 def test_unauthenticated_target_summary_is_rejected(client, db):
     target = make_target(client, "token-a", "A cafe")
 
@@ -205,6 +211,7 @@ def test_unauthenticated_target_summary_is_rejected(client, db):
     assert response.json()["code"] == "unauthenticated"
 
 
+# S2-008: adding or removing a saved review changes the summary
 def test_summary_updates_when_persisted_reviews_are_added_or_removed(client, db):
     target = make_target(client, "token-a", "Dynamic cafe")
     first = Review(
@@ -272,6 +279,7 @@ def test_summary_updates_when_persisted_reviews_are_added_or_removed(client, db)
     }
 
 
+# S2-008: each target's summary uses only its own reviews
 def test_summaries_are_isolated_per_target_for_same_owner(client, db):
     target_a = make_target(client, "token-a", "Target A Cafe")
     target_b = make_target(client, "token-a", "Target B Bakery")
@@ -325,6 +333,7 @@ def test_summaries_are_isolated_per_target_for_same_owner(client, db):
     }
 
 
+# S2-008: User A can't retrieve User B's summary
 def test_cross_user_summary_isolation_with_populated_reviews(client, db):
     target_a = make_target(client, "token-a", "Secret Cafe")
     db.add(

@@ -1,3 +1,5 @@
+# Sprint 2: S2-014 declining general-knowledge questions.
+# Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -13,6 +15,7 @@ def clear_database():
     yield
 
 
+# S2-014: sample general-knowledge questions are outside scope
 @pytest.mark.parametrize(
     "question",
     [
@@ -35,6 +38,7 @@ def test_general_knowledge_questions_are_outside_scope(question):
     assert question not in prompt
 
 
+# S2-014: refusal instructions name ReviewLens's scope
 def test_refusal_instructions_identify_reviewlens_scope():
     prompt = _build_system_prompt(
         target_name="Northside Cafe",
@@ -46,6 +50,7 @@ def test_refusal_instructions_identify_reviewlens_scope():
     assert "unrelated general-knowledge answer" in prompt
 
 
+# S2-014: refusal instructions apply to every target
 def test_refusal_instructions_are_target_independent():
     first_prompt = _build_system_prompt(
         target_name="Northside Cafe",
@@ -66,6 +71,7 @@ def test_refusal_instructions_are_target_independent():
         assert "Redirect the user" in prompt
 
 
+# S2-014: a general-knowledge question is sent with the scope instructions
 def test_general_knowledge_question_receives_scope_instructions():
     target = SimpleNamespace(
         id=1,

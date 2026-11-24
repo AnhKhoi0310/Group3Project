@@ -1,3 +1,5 @@
+# Sprint 2 extra: reviewer avatars and customer photos (tag: Photos).
+# Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 """Reviewer avatars and customer photos collected with reviews."""
 
 import pytest
@@ -28,11 +30,13 @@ def record(review_id="r1", text="Great slice.", images=(PHOTO_1, PHOTO_2)):
 # Which image URLs are accepted
 
 
+# Photos: Google image links are kept
 @pytest.mark.parametrize("url", [AVATAR, PHOTO_2, {"thumbnail": PHOTO_1}])
 def test_google_image_urls_are_kept(url):
     assert image_url(url) is not None
 
 
+# Photos: unsafe or unusable image links are dropped
 @pytest.mark.parametrize(
     "url",
     [
@@ -51,6 +55,7 @@ def test_unsafe_or_unusable_image_urls_are_dropped(url):
     assert image_url(url) is None
 
 
+# Photos: the normalizer keeps the avatar and unique photos
 def test_normalized_review_carries_avatar_and_deduplicated_photos():
     raw = record(images=[PHOTO_1, PHOTO_1, "https://evil.example/x", PHOTO_2])
 
@@ -60,6 +65,7 @@ def test_normalized_review_carries_avatar_and_deduplicated_photos():
     assert review["image_urls"] == [PHOTO_1, PHOTO_2]
 
 
+# Photos: at most 6 photos per review
 def test_photos_are_capped():
     photos = [f"https://lh3.googleusercontent.com/p{i}" for i in range(10)]
 
@@ -68,6 +74,7 @@ def test_photos_are_capped():
     assert review["image_urls"] == photos[:MAX_REVIEW_IMAGES]
 
 
+# Photos: a review with no media gets empty values
 def test_review_without_media_gets_empty_values():
     review = normalize_review({"rating": 4, "snippet": "Fine."}, "place-1")
 
@@ -77,6 +84,7 @@ def test_review_without_media_gets_empty_values():
 # Through ingestion, storage and the API
 
 
+# Photos: collected photos are saved and returned by the API
 def test_collected_photos_are_saved_and_listed(client, fetcher):
     target = s1_helpers.create_target(client)
     fetcher.reviews = [record()]
@@ -90,6 +98,7 @@ def test_collected_photos_are_saved_and_listed(client, fetcher):
     assert reviews[0]["image_urls"] == [PHOTO_1, PHOTO_2]
 
 
+# Photos: a review without photos returns an empty list
 def test_review_without_photos_lists_an_empty_photo_list(client, fetcher):
     target = s1_helpers.create_target(client)
     fetcher.reviews = [{"review_id": "r1", "rating": 3, "snippet": "Okay."}]
@@ -102,6 +111,7 @@ def test_review_without_photos_lists_an_empty_photo_list(client, fetcher):
     assert (review["reviewer_avatar_url"], review["image_urls"]) == (None, [])
 
 
+# Photos: re-collecting adds photos without changing text or rating
 def test_recollecting_fills_in_photos_without_changing_the_review(
     client, fetcher, session_factory
 ):
@@ -122,6 +132,7 @@ def test_recollecting_fills_in_photos_without_changing_the_review(
     assert rows[0].image_urls == [PHOTO_1, PHOTO_2]
 
 
+# Photos: existing photos are never replaced
 def test_existing_photos_are_not_replaced(client, fetcher, session_factory):
     target = s1_helpers.create_target(client)
     fetcher.reviews = [record(images=[PHOTO_1])]
@@ -137,6 +148,7 @@ def test_existing_photos_are_not_replaced(client, fetcher, session_factory):
     assert row.image_urls == [PHOTO_1]
 
 
+# Photos: cited reviews include photos, which never reach the model
 def test_cited_reviews_in_answers_include_their_photos(client, fetcher):
     target = s1_helpers.create_target(client)
     fetcher.reviews = [record()]

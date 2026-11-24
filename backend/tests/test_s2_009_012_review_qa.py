@@ -1,3 +1,7 @@
+# Sprint 2: S2-008 to S2-012 review Q&A over HTTP, plus S2-016/018/019/020 cases.
+# Demo: test_switching_targets_sends_only_the_new_targets_reviews,
+#       test_cited_ids_outside_the_supplied_reviews_are_dropped
+# Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 """Review Q&A through the HTTP API (S2-008 to S2-012), on real MySQL.
 
 The model is the deterministic FakeLLM from fake_llm.py, so these tests check
@@ -113,6 +117,7 @@ def ask(client, target_id, question="What do customers like?", token="token-a"):
     )
 
 
+# S2-011: an answer comes back with the reviews it cites
 def test_answer_is_returned_with_the_reviews_it_cites(client, llm, session_factory):
     target = create_target(client)
     ids = add_reviews(
@@ -134,6 +139,7 @@ def test_answer_is_returned_with_the_reviews_it_cites(client, llm, session_facto
     assert "What do customers like?" in llm.last_request["user_prompt"]
 
 
+# S2-012: a question the reviews don't cover is reported as insufficient
 def test_question_about_missing_evidence_is_reported_as_insufficient(
     client, llm, session_factory
 ):
@@ -163,6 +169,7 @@ def test_question_about_missing_evidence_is_reported_as_insufficient(
     assert "insufficient_evidence" in system_prompt
 
 
+# S2-014, S2-015: a declined question never shows evidence
 def test_declined_question_never_shows_evidence(client, llm, session_factory):
     target = create_target(client)
     ids = add_reviews(session_factory, target["id"], ["Great tiramisu."])
@@ -174,6 +181,7 @@ def test_declined_question_never_shows_evidence(client, llm, session_factory):
     assert body["evidence"] == []
 
 
+# S2-016 (demo extra): cited reviews that weren't sent with the question are dropped
 def test_cited_ids_outside_the_supplied_reviews_are_dropped(
     client, llm, session_factory
 ):
@@ -190,6 +198,7 @@ def test_cited_ids_outside_the_supplied_reviews_are_dropped(
     assert "SECRET-PHRASE-B" not in llm.last_request["user_prompt"]
 
 
+# S2-016: another user's target returns 404; the model is never called
 def test_another_users_target_returns_404_without_calling_the_model(
     client, llm, session_factory
 ):
@@ -203,6 +212,7 @@ def test_another_users_target_returns_404_without_calling_the_model(
     assert llm.call_count == 0
 
 
+# S2-016: a missing target looks the same as someone else's
 def test_unknown_target_looks_the_same_as_someone_elses(client, llm):
     response = ask(client, 987654321)
 
@@ -210,6 +220,7 @@ def test_unknown_target_looks_the_same_as_someone_elses(client, llm):
     assert response.json()["code"] == "target_not_found"
 
 
+# S2-009: blank or too-long questions are rejected before the model
 @pytest.mark.parametrize("question", ["", "   ", "x" * 1001])
 def test_blank_or_huge_question_is_rejected_before_the_model(client, llm, question):
     target = create_target(client)
@@ -221,6 +232,7 @@ def test_blank_or_huge_question_is_rejected_before_the_model(client, llm, questi
     assert llm.call_count == 0
 
 
+# S2-020: a target with no reviews never reaches the model
 def test_target_without_reviews_does_not_reach_the_model(client, llm):
     target = create_target(client)
 
@@ -236,6 +248,7 @@ def test_target_without_reviews_does_not_reach_the_model(client, llm):
 # ---------------------------------------------------------------------------
 
 
+# S2-020: reviews without a successful collection never reach the model
 def test_target_with_review_rows_but_no_successful_ingestion_does_not_reach_model(
     client, llm, session_factory
 ):
@@ -265,6 +278,7 @@ def test_target_with_review_rows_but_no_successful_ingestion_does_not_reach_mode
     assert llm.requests == []
 
 
+# S2-020: a successful collection with zero reviews never reaches the model
 def test_successful_ingestion_with_zero_reviews_does_not_reach_model(
     client, llm, session_factory
 ):
@@ -291,6 +305,7 @@ def test_successful_ingestion_with_zero_reviews_does_not_reach_model(
     assert llm.requests == []
 
 
+# S2-020, S2-005: a later failed collection keeps the earlier dataset usable
 def test_latest_failed_ingestion_keeps_previous_successful_dataset_available(
     client, llm, session_factory
 ):
@@ -332,6 +347,7 @@ def test_latest_failed_ingestion_keeps_previous_successful_dataset_available(
     )
 
 
+# S2-010: context is capped at the 200 newest reviews
 def test_context_is_capped_at_the_most_recent_reviews(client, llm, session_factory):
     target = create_target(client)
     texts = [f"review-number-{i:03d}" for i in range(MAX_CONTEXT_REVIEWS + 5)]
@@ -346,6 +362,7 @@ def test_context_is_capped_at_the_most_recent_reviews(client, llm, session_facto
     assert "review-number-000" not in sent
 
 
+# S2-008: Q&A and the summary describe the same saved reviews
 def test_qa_and_summary_describe_the_same_dataset(client, llm, session_factory):
     """S2-008: the summary and Q&A read the same persisted reviews."""
     target = create_target(client)
@@ -364,6 +381,7 @@ def test_qa_and_summary_describe_the_same_dataset(client, llm, session_factory):
     assert summary.json()["average_rating"] == 3.5
 
 
+# S2-018 (demo): after a switch, only the new target's reviews reach the model
 def test_switching_targets_sends_only_the_new_targets_reviews(
     client, llm, session_factory
 ):
@@ -382,6 +400,7 @@ def test_switching_targets_sends_only_the_new_targets_reviews(
     assert "Battery Shop" not in latest["system_prompt"]
 
 
+# S2-011: a plain-text model reply is still shown as an answer
 def test_plain_text_model_reply_is_shown_as_an_answer(client, llm, session_factory):
     target = create_target(client)
     add_reviews(session_factory, target["id"], ["Nice."])
@@ -396,6 +415,7 @@ def test_plain_text_model_reply_is_shown_as_an_answer(client, llm, session_facto
     )
 
 
+# S2-014: a model safety refusal becomes a clear decline
 def test_model_refusal_becomes_a_clear_decline(client, session_factory):
     target = create_target(client)
     add_reviews(session_factory, target["id"], ["Nice."])
@@ -407,6 +427,7 @@ def test_model_refusal_becomes_a_clear_decline(client, session_factory):
     assert response.json()["status"] == "declined"
 
 
+# S2-009: AI service failures return distinct, friendly errors
 @pytest.mark.parametrize(
     ("category", "status_code", "code"),
     [
@@ -431,6 +452,7 @@ def test_model_failures_return_distinct_friendly_errors(
     assert category not in response.json()["message"]
 
 
+# S2-016: owner or target IDs in the request body are ignored
 def test_owner_fields_in_the_body_are_ignored(client, llm, session_factory):
     other = create_target(client, "User B Diner", token="token-b")
     add_reviews(session_factory, other["id"], ["SECRET-PHRASE-B"])
@@ -455,6 +477,7 @@ def test_owner_fields_in_the_body_are_ignored(client, llm, session_factory):
         assert session.get(AnalysisTarget, other["id"]).name == "User B Diner"
 
 
+# S2-019: context is rebuilt correctly across repeated switches
 def test_review_context_is_rebuilt_after_repeated_target_switches(
     client, llm, session_factory
 ):

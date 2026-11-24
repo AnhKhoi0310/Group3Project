@@ -1,3 +1,5 @@
+# Sprint 2: S2-011 model adapter (app/adapters/llm.py), tested with a fake SDK client.
+# Search a story ID (for example S2-016) to find its tests. Map: docs/testing.md
 """The Claude adapter, tested against a fake SDK client. No network calls."""
 
 from types import SimpleNamespace
@@ -47,6 +49,7 @@ def status_error(cls, code):
     )
 
 
+# S2-011: the adapter sends the prompts, the JSON reply format and the refusal fallback
 def test_request_sends_prompts_schema_and_fallback():
     fake = FakeAnthropic()
 
@@ -65,6 +68,7 @@ def test_request_sends_prompts_schema_and_fallback():
     assert call["fallbacks"] == "default"
 
 
+# S2-011: the configured model is used
 def test_configured_model_is_used():
     fake = FakeAnthropic()
 
@@ -73,6 +77,7 @@ def test_configured_model_is_used():
     assert fake.calls[0]["model"] == "claude-opus-5-5"
 
 
+# S2-011: only the reply text is returned
 def test_reply_text_is_returned_without_thinking_blocks():
     fake = FakeAnthropic(response=reply('{"answer": "ok"}'))
 
@@ -81,6 +86,7 @@ def test_reply_text_is_returned_without_thinking_blocks():
     )
 
 
+# S2-009: each provider error maps to its own category
 @pytest.mark.parametrize(
     ("error", "category"),
     [
@@ -103,6 +109,7 @@ def test_provider_errors_map_to_distinct_categories(error, category):
     assert "provider detail" not in str(caught.value)
 
 
+# S2-009: refusals, cut-off and empty replies are reported
 @pytest.mark.parametrize(
     ("response", "category"),
     [
@@ -121,6 +128,7 @@ def test_unusable_replies_are_reported(response, category):
     assert caught.value.category == category
 
 
+# S2-003: the client builds without calling the provider
 def test_client_can_be_built_from_an_api_key_without_calling_the_provider():
     assert ClaudeClient(api_key="test-key")._client.api_key == "test-key"
 
@@ -136,6 +144,7 @@ def settings(**overrides):
     )
 
 
+# S2-009: no API key means Q&A is unavailable, not broken
 def test_missing_api_key_makes_qa_unavailable(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setattr(questions, "get_settings", lambda: settings())
@@ -146,6 +155,7 @@ def test_missing_api_key_makes_qa_unavailable(monkeypatch):
     assert (caught.value.status_code, caught.value.code) == (503, "qa_unavailable")
 
 
+# S2-011: a configured key builds one reusable client
 def test_configured_api_key_builds_the_claude_client(monkeypatch):
     monkeypatch.setattr(
         questions,
